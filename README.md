@@ -5,8 +5,6 @@ The project consists of developing the logical engine of an archaeological explo
 
 > **Objective:** reach the exit with the **highest accumulated treasure value** possible.
 
----
-
 ## 2. Game Mechanics
 
 ### 🗺️ The Labyrinth
@@ -39,8 +37,6 @@ The project consists of developing the logical engine of an archaeological explo
 - At each step (with a small delay), the labyrinth is displayed in **ASCII characters** on the console
 - The current backpack contents are printed beside or below the map
 
----
-
 ## 3. Technical Requirements
 
 - **Language:** C
@@ -50,8 +46,6 @@ The project consists of developing the logical engine of an archaeological explo
   - Step-by-step visual display in the terminal
   - Total treasure value upon finding the exit
   - Correct path (entrance → exit) written to an output `.txt` file
-
----
 
 ## 4. Evaluation Criteria (maximum 10 points)
 
@@ -69,5 +63,3 @@ The project consists of developing the logical engine of an archaeological explo
 - `.txt` file with a test labyrinth
 - `.txt` output file
 - `.txt` file with full name and student ID of all members
-
----
