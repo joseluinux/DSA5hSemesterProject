@@ -1,0 +1,8 @@
+# Compiled output
+*.o
+lab
+
+# Generated docs
+docs/html/
+docs/latex/
+Doxyfile
