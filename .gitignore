@@ -6,3 +6,6 @@ lab
 docs/html/
 docs/latex/
 Doxyfile
+
+# IntelliJ IDEA files
+.idea/
