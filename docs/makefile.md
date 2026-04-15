@@ -13,7 +13,7 @@ make clean                               # delete compiled files
 | Command | What it does |
 |---|---|
 | `make` | Builds the `lab` executable. Only recompiles files that changed since the last build. |
-| `make clean` | Deletes all `.o` object files and the `lab` executable. |
+| `make clean` | Deletes all `.o` object files, and the `lab` executable. |
 
 
 ## Variables
