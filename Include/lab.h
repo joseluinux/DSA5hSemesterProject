@@ -1,94 +1,55 @@
-/*prototipos e definicoes do projeto AC2 - Estrutura de Dados*/
-#include <stdio.h>
-#include <stdlib.h>
+/*
+ * lab.h
+ * Labyrinth loader and stack-based backtracking solver.
+ */
 
-#define MAX_LINHAS 40
-#define MAX_COLUNAS 40
-#define MAX_PILHA (MAX_LINHAS * MAX_COLUNAS)
+#ifndef LAB_H
+#define LAB_H
 
-/*estrutura de posicao no labirinto*/
-typedef struct {
-    int linha;
-    int coluna;
-} Posicao;
+#include "stack.h"
 
-/*definicao da Pilha*/
-typedef struct {
-    int topo;
-    Posicao itens[MAX_PILHA];
-} Pilha;
+/* Labyrinth cell symbols */
+#define WALL    '#'
+#define PATH    ' '
+#define START   'P'
+#define EXIT_S  'S'
+#define VISITED '.'
 
-/*prototipos das operacoes sobre Pilha*/
-void cria_pilha(Pilha *p);
-int pilha_vazia(Pilha *p);
-int pilha_cheia(Pilha *p);
-int push(Pilha *p, Posicao pos);
-Posicao pop(Pilha *p);
-Posicao topo_pilha(Pilha *p);
-void libera_pilha(Pilha *p);
+/*
+ * Loads a labyrinth from a text file into a 1D array (row-major order).
+ * Sets *rows, *cols, *start and *exit_pos.
+ * Returns 1 on success, 0 on failure.
+ */
+int load_labyrinth(const char *filename, char lab[], int *rows, int *cols,
+                   Position *start, Position *exit_pos);
 
-/*definicao da Mochila*/
-typedef struct NoTesouro {
-    int valor;
-    struct NoTesouro *prox;
-} NoTesouro;
+/*
+ * Prints the labyrinth to stdout.
+ */
+void show_labyrinth(const char lab[], int rows, int cols);
 
-typedef struct {
-    int qtd;
-    NoTesouro *inicio;
-} Mochila;
+/*
+ * Saves the solved labyrinth state to a file.
+ */
+void save_solution(const char *filename, const char lab[], int rows, int cols);
 
-/*rototipos das operacoes sobre Mochila*/
-void cria_mochila(Mochila *m);
-int mochila_vazia(Mochila *m);
-void insere_mochila(Mochila *m, int valor);
-int remove_menor_mochila(Mochila *m);
-int total_mochila(Mochila *m);
-void libera_mochila(Mochila *m);
+/*
+ * Returns 1 if (r, c) is inside bounds and is a walkable cell.
+ */
+int is_valid_position(int r, int c, const char lab[], int rows, int cols);
 
-/*prototipos das operacoes com o Labirinto, representado como vetor unidimensional)*/
-int carrega_labirinto(
-    char nomeArquivo[],
-    char labirinto[],
-    int *linhas,
-    int *colunas,
-    Posicao *inicio,
-    Posicao *saida
-);
+/*
+ * Iterative backtracking using a Stack.
+ * Finds a path from start to exit.
+ * Prints each move to stdout and waits for ENTER.
+ * Returns 1 if exit found, 0 otherwise.
+ */
+int find_exit(char lab[], int rows, int cols,
+              Position start, Stack *path);
 
-void mostra_labirinto(
-    char labirinto[],
-    int linhas,
-    int colunas
-);
+/*
+ * Waits for user to press ENTER.
+ */
+void wait_for_enter(void);
 
-void salva_solucao(
-    char nomeArquivo[],
-    char labirinto[],
-    int linhas,
-    int colunas,
-    Pilha *caminho
-);
-
-/*prototipos do algoritmo de busca*/
-int posicao_valida(
-    int lin,
-    int col,
-    char labirinto[],
-    int linhas,
-    int colunas
-);
-
-int busca_saida(
-    char labirinto[],
-    int linhas,
-    int colunas,
-    int lin_atual,
-    int col_atual,
-    Mochila *m,
-    Pilha *caminho
-);
-
-/*funcoes auxiliares*/
-int gera_tesouro(void);
-void delay(int ms);
+#endif /* LAB_H */

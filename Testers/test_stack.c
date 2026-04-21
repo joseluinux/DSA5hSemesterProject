@@ -208,7 +208,7 @@ static void test_reuse_after_free(void) {
 
 /* ------------------------------------------------------------------ */
 
-int main(void) {
+int main() {
     printf("========================================\n");
     printf("  Stack Test Suite\n");
     printf("========================================\n\n");
