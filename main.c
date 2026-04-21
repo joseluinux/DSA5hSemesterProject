@@ -6,9 +6,12 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <time.h>
 #include "Include/lab.h"
 
-int main() {
+int main(void) {
+    srand((unsigned)time(NULL));
+
     char filename[256];
 
     printf("Enter labyrinth file path: ");
@@ -36,13 +39,28 @@ int main() {
     Stack path;
     stack_init(&path);
 
-    if (find_exit(lab, rows, cols, start, &path)) {
-        printf("\nPath found! Saving to output.txt\n");
+    LinkedList *backpack = list_create();
+    if (!backpack) {
+        fprintf(stderr, "Error: could not allocate backpack.\n");
+        return EXIT_FAILURE;
+    }
+
+    int found = find_exit(lab, rows, cols, start, &path, backpack);
+
+    if (found) {
+        long total = 0;
+        for (ListNode *n = backpack->head; n; n = n->next)
+            total += n->data;
+
+        printf("\nPath found! Total treasure: %ld coins (%zu items).\n",
+               total, list_size(backpack));
+        printf("Saving solution to output.txt\n");
         save_solution("output.txt", lab, rows, cols);
     } else {
         printf("\nNo path to exit found.\n");
     }
 
+    list_destroy(backpack);
     stack_free(&path);
     return EXIT_SUCCESS;
 }

@@ -1,7 +1,7 @@
 CC = gcc
 CFLAGS = -Wall -Wextra -g -IInclude
 
-SRCS = main.c lab.c linked_list.c dlinked_list.c
+SRCS = main.c Include/lab.c Include/stack.c linked_list.c dlinked_list.c
 OBJS = $(SRCS:.c=.o)
 TARGET = lab
 
@@ -11,7 +11,7 @@ $(TARGET): $(OBJS)
 	$(CC) $(CFLAGS) -o $@ $^
 
 %.o: %.c
-	$(CC) $(CFLAGS) -c $<
+	$(CC) $(CFLAGS) -c $< -o $@
 
 test_visual: Testers/lists/test_visual.o $(LIST_OBJS)
 	$(CC) $(CFLAGS) -o $@ $^
@@ -26,6 +26,6 @@ test: test_auto
 	./test_auto; rm -f Testers/lists/test_auto.o test_auto
 
 clean:
-	rm -f *.o test/*.o $(TARGET) test_visual test_auto
+	rm -f *.o Include/*.o Testers/lists/*.o $(TARGET) test_visual test_auto
 
 .PHONY: clean test

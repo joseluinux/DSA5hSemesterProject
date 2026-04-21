@@ -7,13 +7,20 @@
 #define LAB_H
 
 #include "stack.h"
+#include "linked_list.h"
 
 /* Labyrinth cell symbols */
-#define WALL    '#'
-#define PATH    ' '
-#define START   'P'
-#define EXIT_S  'S'
-#define VISITED '.'
+#define WALL     '#'
+#define PATH     ' '
+#define START    'P'
+#define EXIT_S   'S'
+#define TREASURE 'T'
+#define TRAP     'A'
+#define VISITED  '.'
+
+/* Treasure value range drawn on pickup, inclusive. */
+#define TREASURE_MIN_VALUE 1
+#define TREASURE_MAX_VALUE 100
 
 /*
  * Loads a labyrinth from a text file into a 1D array (row-major order).
@@ -40,12 +47,14 @@ int is_valid_position(int r, int c, const char lab[], int rows, int cols);
 
 /*
  * Iterative backtracking using a Stack.
- * Finds a path from start to exit.
- * Prints each move to stdout and waits for ENTER.
+ * Finds a path from start to exit, collecting treasures and triggering traps
+ * on every cell entered. `backpack` is an ascending-sorted list of treasure
+ * values: traps pop the front (lowest value) to minimise losses.
+ * Prints each move (with backpack state) to stdout and waits for ENTER.
  * Returns 1 if exit found, 0 otherwise.
  */
 int find_exit(char lab[], int rows, int cols,
-              Position start, Stack *path);
+              Position start, Stack *path, LinkedList *backpack);
 
 /*
  * Waits for user to press ENTER.
