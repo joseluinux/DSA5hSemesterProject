@@ -1,11 +1,11 @@
 CC = gcc
-CFLAGS = -Wall -Wextra -g -IInclude
+CFLAGS = -Wall -Wextra -g -Iinclude
 
-SRCS = main.c Include/lab.c Include/stack.c linked_list.c dlinked_list.c
+SRCS = src/main.c src/lab.c src/stack.c src/linked_list.c src/dlinked_list.c
 OBJS = $(SRCS:.c=.o)
 TARGET = lab
 
-LIST_OBJS = linked_list.o dlinked_list.o
+LIST_OBJS = src/linked_list.o src/dlinked_list.o
 
 $(TARGET): $(OBJS)
 	$(CC) $(CFLAGS) -o $@ $^
@@ -13,19 +13,22 @@ $(TARGET): $(OBJS)
 %.o: %.c
 	$(CC) $(CFLAGS) -c $< -o $@
 
-test_visual: Testers/lists/test_visual.o $(LIST_OBJS)
+test_visual: tests/test_visual.o $(LIST_OBJS)
 	$(CC) $(CFLAGS) -o $@ $^
 
-test_auto: Testers/lists/test_auto.o $(LIST_OBJS)
+test_auto: tests/test_auto.o $(LIST_OBJS)
 	$(CC) $(CFLAGS) -o $@ $^
 
-Testers/lists/%.o: Testers/lists/%.c
+test_stack: tests/test_stack.o src/stack.o
+	$(CC) $(CFLAGS) -o $@ $^
+
+tests/%.o: tests/%.c
 	$(CC) $(CFLAGS) -c $< -o $@
 
 test: test_auto
-	./test_auto; rm -f Testers/lists/test_auto.o test_auto
+	./test_auto; rm -f tests/test_auto.o test_auto
 
 clean:
-	rm -f *.o Include/*.o Testers/lists/*.o $(TARGET) test_visual test_auto
+	rm -f src/*.o tests/*.o $(TARGET) test_visual test_auto test_stack
 
 .PHONY: clean test

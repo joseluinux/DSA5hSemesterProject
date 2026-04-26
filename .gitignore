@@ -1,6 +1,12 @@
 # Compiled output
 *.o
+*.exe
 lab
+lab.exe
+test_auto
+test_visual
+test_stack
+output.txt
 
 # Generated docs
 docs/html/
@@ -10,4 +16,4 @@ Doxyfile
 # IntelliJ IDEA files
 .idea/
 
-Claude.md
+CLAUDE.md

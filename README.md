@@ -37,7 +37,20 @@ The project consists of developing the logical engine of an archaeological explo
 - At each step (with a small delay), the labyrinth is displayed in **ASCII characters** on the console
 - The current backpack contents are printed beside or below the map
 
-## 3. Technical Requirements
+## 3. Project Structure
+
+```
+.
+├── src/          # Implementation (.c files)
+├── include/      # Headers (.h files)
+├── tests/        # Test programs
+├── maps/         # Labyrinth input files (.txt)
+└── docs/         # Developer documentation
+```
+
+Build with `make`. Run with `./lab` (prompts for a map file path).
+
+## 4. Technical Requirements
 
 - **Language:** C
 - **Mandatory Structures:** Stacks, Lists, and Sorting Algorithm (if necessary)
@@ -47,7 +60,7 @@ The project consists of developing the logical engine of an archaeological explo
   - Total treasure value upon finding the exit
   - Correct path (entrance → exit) written to an output `.txt` file
 
-## 4. Evaluation Criteria (maximum 10 points)
+## 5. Evaluation Criteria (maximum 10 points)
 
 | Criterion | Description |
 |-----------|-------------|

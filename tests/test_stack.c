@@ -5,7 +5,7 @@
 
 #include <stdio.h>
 #include <stdlib.h>
-#include "../Include/stack.h"
+#include "stack.h"
 
 static int tests_run    = 0;
 static int tests_passed = 0;

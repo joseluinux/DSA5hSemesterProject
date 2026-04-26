@@ -7,7 +7,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <time.h>
-#include "Include/lab.h"
+#include "lab.h"
 
 int main(void) {
     srand((unsigned)time(NULL));
