@@ -1,22 +1,15 @@
-# Compiled output
-*.o
-*.exe
-lab
-lab.exe
-linked_list_test
-dlinked_list_test
-stack_test
-linked_list_visual
-dlinked_list_visual
-stack_visual
-output.txt
+# Build artifacts
+build/
+/maze
 
-# Generated docs
-docs/html/
-docs/latex/
-Doxyfile
+# Generated output
+output/solution.txt
 
-# IntelliJ IDEA files
+# Editors
+.vscode/
 .idea/
+*.swp
+*.swo
 
+# MCP files
 CLAUDE.md

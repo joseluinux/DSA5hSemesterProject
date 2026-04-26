@@ -1,51 +1,75 @@
-CC = gcc
-CFLAGS = -Wall -Wextra -g -Iinclude
+CC     = gcc
+CFLAGS = -Wall -Wextra -g -Isrc -MMD -MP -Iinclude
+BUILD  = build
 
-SRCS = src/main.c src/lab.c src/stack.c src/linked_list.c src/dlinked_list.c
-OBJS = $(SRCS:.c=.o)
-TARGET = lab
+# Main objects
+OBJ = $(BUILD)/main.o       \
+      $(BUILD)/maze.o       \
+      $(BUILD)/stack.o      \
+      $(BUILD)/linked_list.o \
+      $(BUILD)/backtrack.o  \
+      $(BUILD)/renderer.o
 
-$(TARGET): $(OBJS)
-	$(CC) $(CFLAGS) -o $@ $^
+-include $(OBJ:.o=.d)
 
-%.o: %.c
+# Top-level targets
+.PHONY: all test test-visual clean
+
+all: maze
+
+maze: $(OBJ)
+	$(CC) $(CFLAGS) $^ -o $@
+
+# Automated tests
+test: $(BUILD)/test_stack $(BUILD)/test_linked_list $(BUILD)/test_backtrack
+	@echo "=== test_stack ==="
+	./$(BUILD)/test_stack
+	@echo "=== test_linked_list ==="
+	./$(BUILD)/test_linked_list
+	@echo "=== test_backtrack ==="
+	./$(BUILD)/test_backtrack
+
+$(BUILD)/test_stack: ../DSA5hSemesterProject/tests/auto $(BUILD)/stack.o | $(BUILD)
+	$(CC) $(CFLAGS) $^ -o $@
+
+$(BUILD)/test_linked_list: ../DSA5hSemesterProject/tests/auto $(BUILD)/linked_list.o | $(BUILD)
+	$(CC) $(CFLAGS) $^ -o $@
+
+$(BUILD)/test_backtrack: ../DSA5hSemesterProject/tests/auto \
+                         $(BUILD)/stack.o $(BUILD)/linked_list.o \
+                         $(BUILD)/maze.o $(BUILD)/backtrack.o $(BUILD)/renderer.o | $(BUILD)
+	$(CC) $(CFLAGS) $^ -o $@
+
+# Visual tests
+test-visual: $(BUILD)/visual_test_maze $(BUILD)/visual_test_backpack
+	./$(BUILD)/visual_test_maze mazes/maze_10x10.txt
+	./$(BUILD)/visual_test_backpack
+
+$(BUILD)/visual_test_maze: ../DSA5hSemesterProject/tests/visual \
+                           $(BUILD)/maze.o $(BUILD)/backtrack.o $(BUILD)/renderer.o \
+                           $(BUILD)/stack.o $(BUILD)/linked_list.o | $(BUILD)
+	$(CC) $(CFLAGS) $^ -o $@
+
+$(BUILD)/visual_test_backpack: ../DSA5hSemesterProject/tests/visual \
+                               $(BUILD)/linked_list.o | $(BUILD)
+	$(CC) $(CFLAGS) $^ -o $@
+
+# Compile rules
+$(BUILD)/%.o: src/%.c | $(BUILD)
 	$(CC) $(CFLAGS) -c $< -o $@
 
-tests/auto/%.o: tests/auto/%.c
+$(BUILD)/%.o: ../DSA5hSemesterProject/src/maze | $(BUILD)
 	$(CC) $(CFLAGS) -c $< -o $@
 
-tests/visual/%.o: tests/visual/%.c
+$(BUILD)/%.o: ../DSA5hSemesterProject/src/engine | $(BUILD)
 	$(CC) $(CFLAGS) -c $< -o $@
 
-# --- Auto tests ---
+$(BUILD)/%.o: ../DSA5hSemesterProject/src/structures | $(BUILD)
+	$(CC) $(CFLAGS) -c $< -o $@
 
-linked_list_test: tests/auto/linked_list.o src/linked_list.o
-	$(CC) $(CFLAGS) -o $@ $^
+$(BUILD):
+	mkdir -p $(BUILD)
 
-dlinked_list_test: tests/auto/dlinked_list.o src/dlinked_list.o
-	$(CC) $(CFLAGS) -o $@ $^
-
-stack_test: tests/auto/stack.o src/stack.o
-	$(CC) $(CFLAGS) -o $@ $^
-
-test: linked_list_test dlinked_list_test stack_test
-	./linked_list_test; ./dlinked_list_test; ./stack_test
-	rm -f tests/auto/*.o linked_list_test dlinked_list_test stack_test
-
-# --- Visual / interactive testers ---
-
-linked_list_visual: tests/visual/linked_list.o src/linked_list.o
-	$(CC) $(CFLAGS) -o $@ $^
-
-dlinked_list_visual: tests/visual/dlinked_list.o src/dlinked_list.o
-	$(CC) $(CFLAGS) -o $@ $^
-
-stack_visual: tests/visual/stack.o src/stack.o
-	$(CC) $(CFLAGS) -o $@ $^
-
+# Clean
 clean:
-	rm -f src/*.o tests/auto/*.o tests/visual/*.o $(TARGET) \
-	      linked_list_test dlinked_list_test stack_test \
-	      linked_list_visual dlinked_list_visual stack_visual
-
-.PHONY: clean test
+	rm -rf $(BUILD) maze
