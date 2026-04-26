@@ -1,66 +1,58 @@
-/*
- * stack.h
- * Stack data structure definition and prototypes.
- * Used by the backtracking algorithm to store the path through the labyrinth.
+/**
+ * @file stack.h
+ * @brief Fixed-capacity integer stack used by the backtracking engine.
+ *
+ * Stores 1D cell indices representing the current path through the maze.
+ * All pop/peek operations must only be called on a non-empty stack —
+ * check stack_is_empty() first.
  */
 
 #ifndef STACK_H
 #define STACK_H
 
-#include <stdio.h>
+#include <defs.h>
 
-
-#define MAX_ROWS  40
-#define MAX_COLS  40
-#define MAX_STACK (MAX_ROWS * MAX_COLS)  /* maximum 1600 positions */
-
-
-/* Position: row/column coordinates of a cell in the labyrinth. */
 typedef struct {
-    int row;
-    int col;
-} Position;
-
-/* Stack: static array-backed stack of positions. top == -1 means empty. */
-typedef struct {
-    int      top;
-    Position items[MAX_STACK];
+    int data[MAX_CELLS]; /**< Storage array; capacity = MAX_CELLS. */
+    int top;             /**< Index of the top element; -1 when empty. */
 } Stack;
 
-/* --- Prototypes --------------------------------------------------------- */
-
-/* Initializes the stack (top = -1). Must be called before any other use. */
+/**
+ * @brief Initialise @p s to the empty state.
+ * @param s  Stack to initialise; must not be NULL.
+ */
 void stack_init(Stack *s);
 
-/* Returns 1 if the stack is empty, 0 otherwise. */
-int stack_is_empty(Stack *s);
-
-/* Returns 1 if the stack is full, 0 otherwise. */
-int stack_is_full(Stack *s);
-
-/*
- * Pushes pos onto the stack.
- * Returns 1 on success, 0 on overflow (stack is full).
+/**
+ * @brief Push @p value onto the top of the stack.
+ *
+ * Prints a diagnostic to stderr and returns without change if the stack is
+ * already full (top == MAX_CELLS - 1).
+ *
+ * @param s      Target stack.
+ * @param value  1D cell index to push.
  */
-int stack_push(Stack *s, Position pos);
+void stack_push(Stack *s, int value);
 
-/*
- * Pops and returns the top position.
- * If the stack is empty, prints an error and returns {-1, -1} as a sentinel.
- * Caller must check whether row == -1 before using the result.
+/**
+ * @brief Remove and return the top element.
+ * @param s  Non-empty stack.
+ * @return   The popped value, or -1 if the stack is empty.
  */
-Position stack_pop(Stack *s);
+int stack_pop(Stack *s);
 
-/*
- * Returns the top position WITHOUT removing it (peek).
- * If the stack is empty, prints an error and returns {-1, -1} as a sentinel.
+/**
+ * @brief Return the top element without removing it.
+ * @param s  Non-empty stack.
+ * @return   The top value, or -1 if the stack is empty.
  */
-Position stack_peek(Stack *s);
+int stack_peek(const Stack *s);
 
-/*
- * Resets the stack (top = -1).
- * Kept for API symmetry; no heap memory is allocated in this implementation.
+/**
+ * @brief Test whether the stack holds no elements.
+ * @param s  Stack to test.
+ * @return   1 if empty, 0 otherwise.
  */
-void stack_free(Stack *s);
+int stack_is_empty(const Stack *s);
 
 #endif /* STACK_H */
