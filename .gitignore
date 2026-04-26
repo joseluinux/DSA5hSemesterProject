@@ -3,9 +3,12 @@
 *.exe
 lab
 lab.exe
-test_auto
-test_visual
-test_stack
+linked_list_test
+dlinked_list_test
+stack_test
+linked_list_visual
+dlinked_list_visual
+stack_visual
 output.txt
 
 # Generated docs

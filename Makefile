@@ -5,30 +5,47 @@ SRCS = src/main.c src/lab.c src/stack.c src/linked_list.c src/dlinked_list.c
 OBJS = $(SRCS:.c=.o)
 TARGET = lab
 
-LIST_OBJS = src/linked_list.o src/dlinked_list.o
-
 $(TARGET): $(OBJS)
 	$(CC) $(CFLAGS) -o $@ $^
 
 %.o: %.c
 	$(CC) $(CFLAGS) -c $< -o $@
 
-test_visual: tests/test_visual.o $(LIST_OBJS)
-	$(CC) $(CFLAGS) -o $@ $^
-
-test_auto: tests/test_auto.o $(LIST_OBJS)
-	$(CC) $(CFLAGS) -o $@ $^
-
-test_stack: tests/test_stack.o src/stack.o
-	$(CC) $(CFLAGS) -o $@ $^
-
-tests/%.o: tests/%.c
+tests/auto/%.o: tests/auto/%.c
 	$(CC) $(CFLAGS) -c $< -o $@
 
-test: test_auto
-	./test_auto; rm -f tests/test_auto.o test_auto
+tests/visual/%.o: tests/visual/%.c
+	$(CC) $(CFLAGS) -c $< -o $@
+
+# --- Auto tests ---
+
+linked_list_test: tests/auto/linked_list.o src/linked_list.o
+	$(CC) $(CFLAGS) -o $@ $^
+
+dlinked_list_test: tests/auto/dlinked_list.o src/dlinked_list.o
+	$(CC) $(CFLAGS) -o $@ $^
+
+stack_test: tests/auto/stack.o src/stack.o
+	$(CC) $(CFLAGS) -o $@ $^
+
+test: linked_list_test dlinked_list_test stack_test
+	./linked_list_test; ./dlinked_list_test; ./stack_test
+	rm -f tests/auto/*.o linked_list_test dlinked_list_test stack_test
+
+# --- Visual / interactive testers ---
+
+linked_list_visual: tests/visual/linked_list.o src/linked_list.o
+	$(CC) $(CFLAGS) -o $@ $^
+
+dlinked_list_visual: tests/visual/dlinked_list.o src/dlinked_list.o
+	$(CC) $(CFLAGS) -o $@ $^
+
+stack_visual: tests/visual/stack.o src/stack.o
+	$(CC) $(CFLAGS) -o $@ $^
 
 clean:
-	rm -f src/*.o tests/*.o $(TARGET) test_visual test_auto test_stack
+	rm -f src/*.o tests/auto/*.o tests/visual/*.o $(TARGET) \
+	      linked_list_test dlinked_list_test stack_test \
+	      linked_list_visual dlinked_list_visual stack_visual
 
 .PHONY: clean test
