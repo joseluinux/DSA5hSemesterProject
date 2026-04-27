@@ -24,22 +24,26 @@ Maze *maze_load(const char *filepath) {
 
     /* --- First pass: buffer all non-blank lines into a dynamic array ---
      * cols = widest line (so short trailing lines don't leave garbage cells).
-     * rows = non-blank line count. No header line required. */
-    char   buf[4096]; /* wide enough for any reasonable maze line */
-    char **lines    = NULL;
-    int    rows     = 0, rows_cap = 0, cols = 0;
+     * rows = non-blank line count. No header line required.
+     * getline() grows its buffer automatically, so rows of any length are
+     * read correctly — unlike fgets() which silently truncates at a fixed cap. */
+    char   *buf     = NULL; /* owned by getline; freed after the loop */
+    size_t  buf_cap = 0;
+    char  **lines   = NULL;
+    int     rows    = 0, rows_cap = 0, cols = 0;
 
-    while (fgets(buf, sizeof(buf), f)) {
+    while (getline(&buf, &buf_cap, f) != -1) {
         strip_newline(buf);
         int len = (int)strlen(buf);
         if (len == 0) continue;
         if (len > cols) cols = len;
 
         if (rows == rows_cap) {
-            int new_cap   = rows_cap ? rows_cap * 2 : 16;
-            char **tmp    = realloc(lines, new_cap * sizeof(char *));
+            int new_cap = rows_cap ? rows_cap * 2 : 16;
+            char **tmp  = realloc(lines, new_cap * sizeof(char *));
             if (!tmp) {
                 fclose(f);
+                free(buf);
                 fprintf(stderr, "malloc failed\n");
                 for (int i = 0; i < rows; i++) free(lines[i]);
                 free(lines);
@@ -52,6 +56,7 @@ Maze *maze_load(const char *filepath) {
         lines[rows] = malloc(len + 1);
         if (!lines[rows]) {
             fclose(f);
+            free(buf);
             fprintf(stderr, "malloc failed\n");
             for (int i = 0; i < rows; i++) free(lines[i]);
             free(lines);
@@ -60,6 +65,7 @@ Maze *maze_load(const char *filepath) {
         memcpy(lines[rows], buf, len + 1);
         rows++;
     }
+    free(buf);
     fclose(f);
 
     if (rows == 0 || cols == 0) {
