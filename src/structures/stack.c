@@ -1,4 +1,4 @@
-#include <stdio.h>
+#include <stdio.h>  /* fprintf, stderr — used by stack_push on fatal alloc failure */
 #include <stdlib.h>
 #include <stack.h>
 
@@ -40,21 +40,15 @@ void stack_push(Stack *s, int value) {
     (*s).data[++(*s).top] = value;
 }
 
-/** @brief Remove and return the top element; returns -1 on underflow. */
+/** @brief Remove and return the top element; returns -1 on empty. */
 int stack_pop(Stack *s) {
-    if ((*s).top == -1) {
-        fprintf(stderr, "stack underflow\n");
-        return -1;
-    }
+    if ((*s).top == -1) return -1;
     return (*s).data[(*s).top--];
 }
 
 /** @brief Return the top element without removing it; returns -1 if empty. */
 int stack_peek(const Stack *s) {
-    if ((*s).top == -1) {
-        fprintf(stderr, "stack peek on empty stack\n");
-        return -1;
-    }
+    if ((*s).top == -1) return -1;
     return (*s).data[(*s).top];
 }
 

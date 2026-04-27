@@ -4,8 +4,6 @@
  *
  * Stores 1D cell indices representing the current path through the maze.
  * Capacity grows automatically via realloc; no fixed upper limit.
- * All pop/peek operations must only be called on a non-empty stack —
- * check stack_is_empty() first.
  */
 
 #ifndef STACK_H
@@ -44,14 +42,14 @@ void stack_push(Stack *s, int value);
 
 /**
  * @brief Remove and return the top element.
- * @param s  Non-empty stack.
+ * @param s  Target stack.
  * @return   The popped value, or -1 if the stack is empty.
  */
 int stack_pop(Stack *s);
 
 /**
  * @brief Return the top element without removing it.
- * @param s  Non-empty stack.
+ * @param s  Target stack.
  * @return   The top value, or -1 if the stack is empty.
  */
 int stack_peek(const Stack *s);
