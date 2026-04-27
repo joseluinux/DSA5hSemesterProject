@@ -142,8 +142,14 @@ def generated(cols: int, rows: int, seed: int = 42) -> str:
     return write_maze(f"generated_{cols}x{rows}", grid_str)
 
 
-def run_solver(maze_path: str) -> tuple[bool, float, str]:
-    """Run the solver with option 5 (silent, first path). Returns (found, seconds, output)."""
+def run_solver(maze_path: str, expected_cols: int, expected_rows: int) -> tuple[bool, float, str]:
+    """
+    Run the solver with option 5 (silent, first path).
+    Returns (ok, seconds, output) where ok is False if:
+      - the exit was not reached, OR
+      - the solver's reported dimensions differ from expected (catches line-reader bugs).
+    """
+    import re
     t0 = time.perf_counter()
     result = subprocess.run(
         [SOLVER, maze_path],
@@ -153,8 +159,25 @@ def run_solver(maze_path: str) -> tuple[bool, float, str]:
         timeout=60,
     )
     elapsed = time.perf_counter() - t0
-    found   = "EXIT REACHED" in result.stdout
-    return found, elapsed, result.stdout + result.stderr
+    output  = result.stdout + result.stderr
+
+    found = "EXIT REACHED" in result.stdout
+
+    # Verify the dimensions the solver actually loaded match what we wrote.
+    # The solver prints: "Maze    : <path>  (<cols> x <rows>)"
+    dim_match = re.search(r"\((\d+) x (\d+)\)", result.stdout)
+    dims_ok   = True
+    dim_note  = ""
+    if dim_match:
+        actual_cols, actual_rows = int(dim_match.group(1)), int(dim_match.group(2))
+        if actual_cols != expected_cols or actual_rows != expected_rows:
+            dims_ok  = False
+            dim_note = f" [DIM MISMATCH: got {actual_cols}x{actual_rows}, want {expected_cols}x{expected_rows}]"
+    else:
+        dims_ok  = False
+        dim_note = " [no dimension line in output]"
+
+    return found and dims_ok, elapsed, output + dim_note
 
 
 def separator(title: str) -> None:
@@ -170,27 +193,29 @@ def main() -> None:
 
     print("Stress-testing dynamic maze solver (mode: silent first-path)\n")
 
-    cases: list[tuple[str, str]] = []  # (label, maze_path)
+    # (label, maze_path, expected_cols, expected_rows)
+    cases: list[tuple[str, str, int, int]] = []
 
     # ── Corridor tests ────────────────────────────────────────────────────────
     separator("Wide corridors (stress-test column count)")
     for cols in [100, 500, 1_000, 5_000, 10_000]:
         label = f"corridor_wide  {cols:>7} cols × 3 rows"
         path  = corridor_wide(cols)
-        cases.append((label, path))
+        cases.append((label, path, cols, 3))
 
     separator("Tall corridors (stress-test row count)")
     for rows in [100, 500, 1_000, 5_000, 10_000]:
         label = f"corridor_tall  3 cols × {rows:>7} rows"
         path  = corridor_tall(rows)
-        cases.append((label, path))
+        cases.append((label, path, 3, rows))
 
     # ── Procedurally generated perfect mazes ─────────────────────────────────
     separator("Procedurally generated perfect mazes")
     for cols, rows in [(101, 101), (201, 201), (501, 501), (1001, 1001)]:
+        # generated() snaps to odd, so cols/rows stay the same here (already odd).
         label = f"generated      {cols:>5} cols × {rows:>5} rows"
         path  = generated(cols, rows, seed=42)
-        cases.append((label, path))
+        cases.append((label, path, cols, rows))
 
     # ── Run all cases ─────────────────────────────────────────────────────────
     separator("Results")
@@ -198,13 +223,13 @@ def main() -> None:
     print(f"  {'─'*45} {'─'*10} {'─'*8}")
 
     all_ok = True
-    for label, path in cases:
+    for label, path, exp_cols, exp_rows in cases:
         try:
-            found, elapsed, output = run_solver(path)
-            status = "FOUND" if found else "NO PATH"
-            marker = "" if found else " ← UNEXPECTED"
+            ok, elapsed, output = run_solver(path, exp_cols, exp_rows)
+            status = "FOUND" if ok else "FAIL"
+            marker = "" if ok else " ← UNEXPECTED"
             print(f"  {label:<45} {status:<10} {elapsed:>7.2f}s{marker}")
-            if not found:
+            if not ok:
                 all_ok = False
         except subprocess.TimeoutExpired:
             print(f"  {label:<45} {'TIMEOUT':<10} {'>60s':>8}")
