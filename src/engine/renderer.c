@@ -13,20 +13,32 @@ void renderer_set_delay(unsigned int delay_us) {
     step_delay_us = delay_us;
 }
 
+/* Reused across frames; grown when the maze gets larger, never shrunk. */
+static char *on_path_buf = NULL;
+static int   on_path_cap = 0;
+
 /** @brief Redraw the maze in-place using ANSI escape sequences; see renderer.h. */
 void renderer_draw(const Maze *m, int current_pos,
                    const LinkedList *backpack, const Stack *path) {
     int n = (*m).rows * (*m).cols;
 
-    /* Build a flat lookup so the inner print loop can check membership in O(1)
-     * instead of scanning the stack on every cell. */
-    char *on_path = calloc(n, 1);
-    if (!on_path) {
-        fprintf(stderr, "malloc failed\n");
-        return;
+    /* Grow the lookup buffer only when the maze is larger than any seen before.
+     * The new region is zeroed here; previously used slots are zeroed after each
+     * frame (see below), so the buffer is always clean on entry. */
+    if (n > on_path_cap) {
+        char *tmp = realloc(on_path_buf, n);
+        if (!tmp) {
+            fprintf(stderr, "malloc failed\n");
+            return;
+        }
+        memset(tmp + on_path_cap, 0, n - on_path_cap);
+        on_path_buf = tmp;
+        on_path_cap = n;
     }
+
+    /* Mark path cells — O(path length). */
     for (int i = 0; i <= (*path).top; i++)
-        on_path[(*path).data[i]] = 1;
+        on_path_buf[(*path).data[i]] = 1;
 
     /* \033[H = move cursor to top-left; \033[J = erase from cursor to end.
      * Together they redraw in-place without clearing the scrollback buffer. */
@@ -39,7 +51,7 @@ void renderer_draw(const Maze *m, int current_pos,
 
             if (idx == current_pos) {
                 putchar('@');                   /* player        */
-            } else if (on_path[idx] && cell == CELL_CORRIDOR) {
+            } else if (on_path_buf[idx] && cell == CELL_CORRIDOR) {
                 putchar('.');                   /* trail mark    */
             } else {
                 putchar(cell);                  /* original cell */
@@ -48,7 +60,9 @@ void renderer_draw(const Maze *m, int current_pos,
         putchar('\n');
     }
 
-    free(on_path);
+    /* Clear only the marked slots — O(path length), not O(n). */
+    for (int i = 0; i <= (*path).top; i++)
+        on_path_buf[(*path).data[i]] = 0;
 
     printf("\n");
     list_print(backpack);
