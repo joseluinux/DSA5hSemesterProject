@@ -8,8 +8,8 @@ This project implements the logic engine of an **archaeological exploration game
 ## Gameplay Rules
 
 ### The Maze
-- Represented as a **1D array** simulating a matrix of up to **40×40 cells**.
-- Layout is **loaded from a `.txt` file**. The first line of the file specifies the maze dimensions (e.g., `10X10`).
+- Represented as a **heap-allocated flat 1D array** — no fixed size limit; any maze that fits in memory is supported.
+- Layout is **loaded from a `.txt` file**. No header line is required: `cols` = widest line, `rows` = non-blank line count.
 
 | Symbol | Meaning        |
 |--------|----------------|
@@ -51,7 +51,7 @@ This project implements the logic engine of an **archaeological exploration game
 ```
 /
 ├── include/                        # All public headers (angle-bracket includes via -Iinclude)
-│   ├── defs.h                      # Shared constants (cell symbols, MAX_CELLS)
+│   ├── defs.h                      # Shared cell-type constants (CELL_WALL, CELL_PLAYER, …)
 │   ├── maze.h
 │   ├── backtrack.h
 │   ├── renderer.h
@@ -66,7 +66,7 @@ This project implements the logic engine of an **archaeological exploration game
 │   │   ├── backtrack.c             # DFS search — FIRST and BEST modes
 │   │   └── renderer.c              # ASCII rendering and solution file output
 │   └── structures/
-│       ├── stack.c                 # Fixed-capacity int stack (tracks the current path)
+│       ├── stack.c                 # Dynamic int stack — grows via realloc (tracks the current path)
 │       └── linked_list.c           # Sorted linked list (the backpack)
 │
 ├── tests/
@@ -92,7 +92,8 @@ This project implements the logic engine of an **archaeological exploration game
 │   └── makefile-patterns.md        # Makefile structure and build patterns
 │
 ├── scripts/
-│   └── generate_mazes.py           # Script to generate random maze .txt files
+│   ├── generate_mazes.py           # Script to generate random maze .txt files
+│   └── stress_test.py              # Generates extreme-sized mazes and runs the solver on each
 │
 ├── output/
 │   └── solution.txt                # Final solution path (generated at runtime)
@@ -103,7 +104,7 @@ This project implements the logic engine of an **archaeological exploration game
 
 ## Input File Format
 
-No header line is required. Dimensions are inferred at load time: `cols` = length of the widest line, `rows` = number of non-blank lines. Every cell must be one of the symbols in the table above; short lines are padded with `#`.
+No header line is required. Dimensions are inferred at load time: `cols` = length of the widest line, `rows` = number of non-blank lines. Every cell must be one of the symbols in the table above; short lines are padded with `#`. There is no fixed size limit — the arrays are heap-allocated to exactly `rows × cols` at load time.
 
 **Example (`maze_10x10.txt`):**
 ```
@@ -160,7 +161,7 @@ The program must handle the following cases gracefully:
 - Maze file not found → print error message and exit.
 - No valid path from `P` to `S` → inform the user that the maze has no solution.
 - Trap triggered with an empty backpack → skip item removal and display a warning.
-- Maze dimensions exceeding 40×40 → reject the file with an appropriate message.
+- Maze file is empty or has no `P` / `S` cell → print error and exit.
 
 ## Grading Criteria
 

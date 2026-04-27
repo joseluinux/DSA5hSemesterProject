@@ -121,24 +121,6 @@ def maze_no_solution():
     """P and S separated by a wall — no path exists."""
     grid = [
         "#######",
-        "#P ### #",
-        "#  ### #",
-        "#######",
-        "# S    #",
-        "#######",
-    ]
-    # Build as a clean 8-wide grid
-    grid = [
-        "########",
-        "#P #####",
-        "#  #   #",
-        "#### # #",
-        "#    S #",
-        "########",
-    ]
-    # Verify no path manually: column of walls between P region and S region
-    grid = [
-        "#######",
         "#P #  #",
         "#  #S #",
         "#######",
