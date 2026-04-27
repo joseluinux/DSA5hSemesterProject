@@ -265,8 +265,11 @@ static void explore(Maze *maze, Stack *path, LinkedList *backpack,
             /* Deep-copy the backpack contents. */
             free((*best).backpack_values);
             (*best).backpack_size   = 0;
-            (*best).backpack_values = (*backpack).size > 0
-                ? malloc((*backpack).size * sizeof(int)) : NULL;
+            (*best).backpack_values = NULL;
+            if ((*backpack).size > 0) {
+                (*best).backpack_values = malloc((*backpack).size * sizeof(int));
+                if (!(*best).backpack_values) { fprintf(stderr, "malloc failed\n"); exit(1); }
+            }
             for (Node *n = (*backpack).head; n; n = (*n).next)
                 (*best).backpack_values[(*best).backpack_size++] = (*n).value;
         }
