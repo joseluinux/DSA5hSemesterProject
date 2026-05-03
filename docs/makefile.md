@@ -4,9 +4,10 @@
 
 ```sh
 make                              # compile everything → produces ./maze
+make WITH_GFX=1                   # compile with optional raylib graphical renderer
 ./maze mazes/maze_10x10.txt       # run with a maze file
 make test                         # build and run all automated unit tests
-make test-visual                  # build and run visual test binaries
+make test-visual                  # build and run visual test binary
 make clean                        # delete all build artifacts
 ```
 
@@ -14,9 +15,10 @@ make clean                        # delete all build artifacts
 
 | Command | What it does |
 |---|---|
-| `make` | Builds the `maze` executable. Only recompiles files that changed since the last build. |
-| `make test` | Builds and runs all three automated test binaries (stack, linked_list, backtrack). |
-| `make test-visual` | Builds and runs the visual test binaries against `mazes/maze_10x10.txt`. |
+| `make` | Builds the `maze` executable with terminal-only rendering. |
+| `make WITH_GFX=1` | Same, but also compiles `renderer_gfx.c` (raylib). Requires `libraylib-dev`. |
+| `make test` | Builds and runs the three automated test binaries (stack, linked_list, backtrack). |
+| `make test-visual` | Builds and runs the visual test binary against `mazes/maze_10x10.txt`. |
 | `make clean` | Deletes the `build/` directory and the `maze` executable. |
 
 
@@ -27,6 +29,7 @@ make clean                        # delete all build artifacts
 | `CC` | `gcc` | The compiler. Change to `clang` to use Clang instead. |
 | `CFLAGS` | `-Wall -Wextra -g -Isrc -MMD -MP -Iinclude` | Flags passed to every compilation step. |
 | `BUILD` | `build` | Output directory for all `.o`, `.d`, and test binaries. |
+| `WITH_GFX` | (unset / `1`) | When set to `1`, adds `-DWITH_GFX` to `CFLAGS` and links raylib. |
 
 **Compiler flags explained:**
 
@@ -50,12 +53,16 @@ The `maze` rule says: to build `maze`, first build all `.o` files listed in `OBJ
 **2. Each `.c` file is compiled into a `.o` object file**
 
 ```sh
-gcc -Wall -Wextra -g -Isrc -MMD -MP -Iinclude -c src/main.c              -o build/main.o
-gcc -Wall -Wextra -g -Isrc -MMD -MP -Iinclude -c src/maze/maze.c          -o build/maze.o
-gcc -Wall -Wextra -g -Isrc -MMD -MP -Iinclude -c src/structures/stack.c   -o build/stack.o
-gcc -Wall -Wextra -g -Isrc -MMD -MP -Iinclude -c src/structures/linked_list.c -o build/linked_list.o
-gcc -Wall -Wextra -g -Isrc -MMD -MP -Iinclude -c src/engine/backtrack.c   -o build/backtrack.o
-gcc -Wall -Wextra -g -Isrc -MMD -MP -Iinclude -c src/engine/renderer.c    -o build/renderer.o
+gcc -Wall -Wextra -g -Isrc -MMD -MP -Iinclude -c src/main.c                       -o build/main.o
+gcc -Wall -Wextra -g -Isrc -MMD -MP -Iinclude -c src/maze/maze.c                   -o build/maze.o
+gcc -Wall -Wextra -g -Isrc -MMD -MP -Iinclude -c src/structures/stack.c            -o build/stack.o
+gcc -Wall -Wextra -g -Isrc -MMD -MP -Iinclude -c src/structures/heap.c             -o build/heap.o
+gcc -Wall -Wextra -g -Isrc -MMD -MP -Iinclude -c src/structures/linked_list.c      -o build/linked_list.o
+gcc -Wall -Wextra -g -Isrc -MMD -MP -Iinclude -c src/engine/backtrack.c            -o build/backtrack.o
+gcc -Wall -Wextra -g -Isrc -MMD -MP -Iinclude -c src/engine/pathfind.c             -o build/pathfind.o
+gcc -Wall -Wextra -g -Isrc -MMD -MP -Iinclude -c src/engine/renderer.c             -o build/renderer.o
+# Only with WITH_GFX=1:
+gcc -Wall -Wextra -g -Isrc -MMD -MP -Iinclude -DWITH_GFX -c src/engine/renderer_gfx.c -o build/renderer_gfx.o
 ```
 
 The `-c` flag means "compile only, do not link." Each `.o` file contains machine code for its source but is not yet an executable.
@@ -63,19 +70,45 @@ The `-c` flag means "compile only, do not link." Each `.o` file contains machine
 **3. The object files are linked into the executable**
 
 ```sh
-gcc ... build/main.o build/maze.o build/stack.o build/linked_list.o build/backtrack.o build/renderer.o -o maze
+# Without WITH_GFX:
+gcc ... build/main.o build/maze.o build/stack.o build/heap.o build/linked_list.o \
+        build/backtrack.o build/pathfind.o build/renderer.o -o maze
+
+# With WITH_GFX=1:
+gcc ... <same .o files> build/renderer_gfx.o -o maze \
+        -lraylib -lGL -lm -lpthread -ldl -lrt -lX11
+```
+
+## WITH_GFX — optional graphical renderer
+
+`renderer_gfx.c` wraps the raylib library for a native windowed display. It is excluded from the default build to avoid a mandatory system dependency.
+
+```makefile
+ifdef WITH_GFX
+  CFLAGS  += -DWITH_GFX
+  GFX_OBJ  = $(BUILD)/renderer_gfx.o
+  LDFLAGS  = -lraylib -lGL -lm -lpthread -ldl -lrt -lX11
+else
+  GFX_OBJ  =
+  LDFLAGS  =
+endif
+```
+
+To install raylib on Debian/Ubuntu:
+```sh
+sudo apt install libraylib-dev
 ```
 
 ## Incremental builds
 
 Make compares the modification timestamp of each output file against its inputs. If a source file has not changed since the last build, its `.o` file is up to date and Make skips it.
 
-For example, after editing only `src/maze/maze.c`:
+For example, after editing only `src/engine/pathfind.c`:
 
 ```
 make: 'build/main.o' is up to date.        ← skipped
-gcc ... -c src/maze/maze.c                  ← recompiled
-make: 'build/stack.o' is up to date.       ← skipped
+make: 'build/maze.o' is up to date.        ← skipped
+gcc ... -c src/engine/pathfind.c            ← recompiled
 ...
 gcc ... -o maze ...                         ← relinked
 ```
@@ -86,7 +119,7 @@ gcc ... -o maze ...                         ← relinked
 .PHONY: all test test-visual clean
 ```
 
-`all`, `test`, `test-visual`, and `clean` are rule names, not real files. Without `.PHONY`, if a file with one of those names ever existed, Make would skip the rule silently. `.PHONY` tells Make to always run them.
+`all`, `test`, `test-visual`, and `clean` are rule names, not real files. Without `.PHONY`, if a file with one of those names ever existed, Make would skip the rule silently.
 
 ## Automatic Dependency Tracking
 
@@ -105,10 +138,14 @@ After the first build, changing any header automatically triggers a recompile of
 When a new `.c` file is created under `src/`, add a corresponding `.o` entry to `OBJ` in the Makefile:
 
 ```makefile
-OBJ = $(BUILD)/main.o \
-      $(BUILD)/maze.o \
-      $(BUILD)/stack.o \
-      ...
+OBJ = $(BUILD)/main.o        \
+      $(BUILD)/maze.o        \
+      $(BUILD)/stack.o       \
+      $(BUILD)/heap.o        \
+      $(BUILD)/linked_list.o \
+      $(BUILD)/backtrack.o   \
+      $(BUILD)/pathfind.o    \
+      $(BUILD)/renderer.o    \
       $(BUILD)/new_module.o
 ```
 

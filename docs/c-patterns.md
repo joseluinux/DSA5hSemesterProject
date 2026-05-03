@@ -40,12 +40,30 @@ File-level doc block at the top of every header:
 
 | Kind | Convention | Example |
 |---|---|---|
-| Types | `PascalCase` | `Stack`, `Node`, `Maze` |
-| Functions | `module_verb[_noun]` | `stack_push`, `maze_load`, `list_insert` |
-| Parameters / locals | `lower_snake_case` | `cell_count`, `head_node`, `index` |
-| Constants / macros | `UPPER_SNAKE_CASE` | `MAX_MAZE_SIZE`, `CELL_WALL` |
+| Types | `PascalCase` | `Stack`, `Node`, `Maze`, `Heap`, `HeapNode` |
+| Functions | `module_verb[_noun]` | `stack_push`, `maze_load`, `list_insert`, `heap_pop` |
+| Parameters / locals | `lower_snake_case` | `cell_count`, `head_node`, `cur_pos` |
+| Constants / macros | `UPPER_SNAKE_CASE` | `CELL_WALL`, `PATHFIND_FIRST`, `WITH_GFX` |
 
 The `module_` prefix on every function acts as a namespace — C has no namespaces, so without it a `push` in one module would collide with a `push` in another.
+
+## Struct Member Access
+
+This project uses `(*ptr).member` consistently instead of `ptr->member`. This is a deliberate style choice — both are semantically identical; the explicit dereference emphasizes that you are working through a pointer.
+
+```c
+/* used throughout this codebase */
+int n = (*maze).rows * (*maze).cols;
+(*list).head = node;
+(*h).data[(*h).size] = new_node;
+
+/* equivalent but not used here */
+int n = maze->rows * maze->cols;
+list->head = node;
+h->data[h->size] = new_node;
+```
+
+When reading or writing code in this project, always use `(*ptr).member`.
 
 ## Struct Patterns
 
@@ -81,7 +99,7 @@ typedef struct {
 
 ## Constants
 
-Defined in the header of the module that owns them. Cell-type constants live in `defs.h`; `MAX_MAZE_SIZE` and `MAX_CELLS` were removed when the maze became fully dynamic (arrays are heap-allocated to `rows * cols` at load time):
+Defined in the header of the module that owns them. Cell-type constants live in `defs.h`; no `MAX_MAZE_SIZE` or `MAX_CELLS` — arrays are heap-allocated to `rows * cols` at load time:
 ```c
 #define CELL_WALL      '#'
 #define CELL_CORRIDOR  ' '
@@ -141,6 +159,7 @@ In this project, indices into the 1D maze array use plain `int` because offsets 
 
 - Node allocation/deallocation is handled entirely inside `linked_list.c`; callers never touch raw `Node` pointers.
 - `Maze` is heap-allocated by `maze_load` and freed by `maze_free` — caller owns it.
+- `Heap` data array is heap-allocated inside `heap_init`/`heap_push` and freed by `heap_free`.
 - Always check `malloc`:
 ```c
 Node *node = malloc(sizeof(Node));
@@ -168,6 +187,7 @@ if (!f) {
 Pass structs by pointer, never by value:
 ```c
 int backtrack_run(Maze *maze, LinkedList *backpack, BacktrackMode mode, DisplayMode display);
+int pathfind_run(Maze *maze, LinkedList *backpack, PathfindMode mode, DisplayMode display);
 ```
 
 Prefer returning a result directly over writing to a global. Use output parameters only when a function genuinely needs to return two things:
@@ -175,6 +195,25 @@ Prefer returning a result directly over writing to a global. Use output paramete
 int stack_pop(Stack *s);                        /* good */
 void stack_pop(Stack *s, int *out_value);       /* avoid unless two returns are needed */
 ```
+
+## Section Comments
+
+Multi-line block comments are used to label top-level sections inside `.c` files:
+
+```c
+/*
+Section name
+*/
+static void helper_function(...) { ... }
+```
+
+Single-line comments on non-obvious logic only:
+```c
+/* Reset without freeing — reuse the existing heap allocation. */
+(*trail).top = -1;
+```
+
+Do not write comments that describe *what* the code does (the code already shows that). Only explain *why* when the reason is non-obvious: a hidden constraint, a workaround, or a subtle invariant.
 
 ## Doxygen Function Comments
 

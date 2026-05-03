@@ -12,45 +12,67 @@ BUILD  = build
 ```
 
 `-Iinclude` lets every file use `#include <maze.h>` (angle-bracket style) regardless of where it lives in `src/`.  
-`-Isrc` is kept so nested source paths remain resolvable during compilation.  
+`-Isrc` keeps nested source paths resolvable during compilation.  
 `-MMD -MP` generate `.d` dependency files that track header changes (see below).  
 `-g` keeps debug symbols; strip it for a release build.
+
+## Optional WITH_GFX Flag
+
+The graphical renderer (`renderer_gfx.c`) is conditionally compiled to avoid a mandatory raylib dependency:
+
+```makefile
+ifdef WITH_GFX
+  CFLAGS  += -DWITH_GFX
+  GFX_OBJ  = $(BUILD)/renderer_gfx.o
+  LDFLAGS  = -lraylib -lGL -lm -lpthread -ldl -lrt -lX11
+else
+  GFX_OBJ  =
+  LDFLAGS  =
+endif
+```
+
+`renderer.c` and `main.c` guard their raylib calls with `#ifdef WITH_GFX` — the binary works correctly without it. The `GFX_OBJ` variable is appended to `OBJ` after the conditional block.
 
 ## Directory Layout (build artifacts)
 
 All `.o` files land in `build/` so the source tree stays clean:
+
 ```makefile
-OBJ = $(BUILD_DIR)/main.o \
-      $(BUILD_DIR)/maze.o \
-      $(BUILD_DIR)/stack.o \
-      $(BUILD_DIR)/linked_list.o \
-      $(BUILD_DIR)/backtrack.o \
-      $(BUILD_DIR)/renderer.o
+OBJ = $(BUILD)/main.o        \
+      $(BUILD)/maze.o        \
+      $(BUILD)/stack.o       \
+      $(BUILD)/heap.o        \
+      $(BUILD)/linked_list.o \
+      $(BUILD)/backtrack.o   \
+      $(BUILD)/pathfind.o    \
+      $(BUILD)/renderer.o
+
+OBJ += $(GFX_OBJ)    # renderer_gfx.o when WITH_GFX=1, empty otherwise
 ```
 
 ## Pattern Rule
 
-Compile any `.c` → `.o` with one rule:
+Compile any `.c` → `.o` with one rule per source subdirectory:
+
 ```makefile
-$(BUILD_DIR)/%.o: src/%.c | $(BUILD_DIR)
+$(BUILD)/%.o: src/%.c | $(BUILD)
 	$(CC) $(CFLAGS) -c $< -o $@
 
-# Also needed for nested source paths:
-$(BUILD_DIR)/%.o: src/maze/%.c | $(BUILD_DIR)
+$(BUILD)/%.o: src/maze/%.c | $(BUILD)
 	$(CC) $(CFLAGS) -c $< -o $@
 
-$(BUILD_DIR)/%.o: src/engine/%.c | $(BUILD_DIR)
+$(BUILD)/%.o: src/engine/%.c | $(BUILD)
 	$(CC) $(CFLAGS) -c $< -o $@
 
-$(BUILD_DIR)/%.o: src/structures/%.c | $(BUILD_DIR)
+$(BUILD)/%.o: src/structures/%.c | $(BUILD)
 	$(CC) $(CFLAGS) -c $< -o $@
 ```
 
-`| $(BUILD_DIR)` is an order-only prerequisite — it creates the directory before compiling but doesn't trigger a rebuild if the directory's timestamp changes.
+`| $(BUILD)` is an order-only prerequisite — it creates the directory before compiling but doesn't trigger a rebuild if the directory's timestamp changes.
 
 ```makefile
-$(BUILD_DIR):
-	mkdir -p $(BUILD_DIR)
+$(BUILD):
+	mkdir -p $(BUILD)
 ```
 
 ## Targets
@@ -61,37 +83,56 @@ $(BUILD_DIR):
 all: maze          # default target
 
 maze: $(OBJ)
-	$(CC) $(CFLAGS) $(OBJ) -o $@
+	$(CC) $(CFLAGS) $^ -o $@ $(LDFLAGS)
 
-test: build/test_stack build/test_linked_list build/test_backtrack
-	./build/test_stack
-	./build/test_linked_list
-	./build/test_backtrack
+test: $(BUILD)/test_stack $(BUILD)/test_linked_list $(BUILD)/test_backtrack
+	@echo "=== test_stack ==="
+	./$(BUILD)/test_stack
+	@echo "=== test_linked_list ==="
+	./$(BUILD)/test_linked_list
+	@echo "=== test_backtrack ==="
+	./$(BUILD)/test_backtrack
 
-test-visual: build/visual_test_maze build/visual_test_backpack
-	./build/visual_test_maze mazes/maze_10x10.txt
-	./build/visual_test_backpack
+test-visual: $(BUILD)/visual_test_maze $(BUILD)/visual_test_backpack
+	./$(BUILD)/visual_test_maze mazes/maze_10x10.txt
+	./$(BUILD)/visual_test_backpack
 
 clean:
-	rm -rf $(BUILD_DIR) maze
+	rm -rf $(BUILD) maze
 ```
 
 ## Test Executables
 
-Each test binary links only the modules it needs (not `main.o`):
+Each test binary links only the modules it needs (not `main.o`). `test_backtrack` now includes `heap.o` and `pathfind.o` because `backtrack.c` and `pathfind.c` share the same test suite via `test_backtrack.c`:
+
 ```makefile
-STRUCT_OBJ = $(BUILD_DIR)/stack.o $(BUILD_DIR)/linked_list.o
-
-$(BUILD_DIR)/test_stack: tests/auto/test_stack.c $(BUILD_DIR)/stack.o | $(BUILD_DIR)
+$(BUILD)/test_stack: tests/auto/test_stack.c $(BUILD)/stack.o | $(BUILD)
 	$(CC) $(CFLAGS) $^ -o $@
 
-$(BUILD_DIR)/test_linked_list: tests/auto/test_linked_list.c $(BUILD_DIR)/linked_list.o | $(BUILD_DIR)
+$(BUILD)/test_linked_list: tests/auto/test_linked_list.c $(BUILD)/linked_list.o | $(BUILD)
 	$(CC) $(CFLAGS) $^ -o $@
 
-$(BUILD_DIR)/test_backtrack: tests/auto/test_backtrack.c $(BUILD_DIR)/stack.o \
-                              $(BUILD_DIR)/linked_list.o $(BUILD_DIR)/maze.o \
-                              $(BUILD_DIR)/backtrack.o | $(BUILD_DIR)
-	$(CC) $(CFLAGS) $^ -o $@
+$(BUILD)/test_backtrack: tests/auto/test_backtrack.c      \
+                         $(BUILD)/stack.o                  \
+                         $(BUILD)/linked_list.o            \
+                         $(BUILD)/maze.o                   \
+                         $(BUILD)/backtrack.o              \
+                         $(BUILD)/renderer.o               \
+                         $(BUILD)/heap.o                   \
+                         $(BUILD)/pathfind.o               \
+                         $(GFX_OBJ) | $(BUILD)
+	$(CC) $(CFLAGS) $^ -o $@ $(LDFLAGS)
+```
+
+The visual test links the same set (minus `main.o`, plus the test harness):
+
+```makefile
+$(BUILD)/visual_test_maze: tests/visual/visual_test_maze.c \
+                           $(BUILD)/maze.o $(BUILD)/backtrack.o \
+                           $(BUILD)/renderer.o $(BUILD)/stack.o \
+                           $(BUILD)/linked_list.o $(BUILD)/heap.o \
+                           $(BUILD)/pathfind.o $(GFX_OBJ) | $(BUILD)
+	$(CC) $(CFLAGS) $^ -o $@ $(LDFLAGS)
 ```
 
 ## Automatic Dependency Tracking

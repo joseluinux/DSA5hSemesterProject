@@ -1,50 +1,57 @@
-# 🗺️ C Backtracking Maze
+# C Backtracking Maze
 
 ## Overview
 
 This project implements the logic engine of an **archaeological exploration game** written in **C** for the "Data Structures and Algorithms" class @ FACENS. A treasure hunter must navigate an ancient and dangerous maze to find the exit — collecting treasures and avoiding traps along the way. The goal is not just to escape, but to **maximize the total value of treasures collected**.
 
+Two generations of solver are available simultaneously at runtime:
+
+- **V1 — Backtracking DFS**: exhaustive depth-first search with branch-and-bound pruning. Guarantees the globally optimal (maximum-treasure) path.
+- **V2 — A\*/Dijkstra**: polynomial-time graph search. A\* finds the shortest path; Dijkstra finds the highest-treasure path as a fast heuristic.
 
 ## Gameplay Rules
 
 ### The Maze
+
 - Represented as a **heap-allocated flat 1D array** — no fixed size limit; any maze that fits in memory is supported.
 - Layout is **loaded from a `.txt` file**. No header line is required: `cols` = widest line, `rows` = non-blank line count.
 
-| Symbol | Meaning        |
-|--------|----------------|
-| `#`    | Wall           |
-| ` `    | Corridor (path)|
-| `P`    | Player (start) |
-| `T`    | Treasure       |
-| `A`    | Trap           |
-| `S`    | Exit           |
+| Symbol | Meaning         |
+|--------|-----------------|
+| `#`    | Wall            |
+| ` `    | Corridor (path) |
+| `P`    | Player (start)  |
+| `T`    | Treasure        |
+| `A`    | Trap            |
+| `S`    | Exit            |
 
 ### Movement & Search
-- The software must implement a **Backtracking** search algorithm to navigate through crossroads and dead ends until the exit is found.
+
+- V1 implements a **backtracking** search algorithm using an explicit stack, navigating all crossroads and dead ends.
+- V2 implements **A\*** (PATHFIND_FIRST) and **Dijkstra** (PATHFIND_BEST) using a binary min-heap priority queue.
 
 ### The Backpack (Mochila)
-- Every treasure found is stored in the **backpack**.
+
+- Every treasure found is stored in the **backpack** (sorted linked list).
 - Each treasure has a **randomly generated value between 1 and 100 coins**, pre-assigned at maze load time.
 - **Trap rule:** When the player steps on a trap (`A`), the treasure in the **first position** of the backpack is lost.
-- **Maximization strategy:** To minimize losses, the backpack must always keep the **lowest-value treasure at the first position** (i.e., it must be kept sorted in ascending order).
+- **Minimization strategy:** the backpack is always sorted in ascending order so the **lowest-value treasure is at the head** — the one sacrificed on a trap, minimizing total loss.
 
 ### Visual Interface
-- The maze is rendered **step by step** in the terminal using **ASCII characters**.
-- Each step is displayed with a **small delay**.
-- The **current backpack contents** are printed alongside or below the maze at every step.
 
+- **Terminal mode:** the maze is rendered step by step in ASCII. The current player position is shown as `@`; the trail is shown as `.`.
+- **Graphical mode** (optional, requires raylib): a native window with colored cells, sidebar backpack display, and animated step-through.
 
 ## Technical Requirements
 
-| Requirement         | Detail                                              |
-|---------------------|-----------------------------------------------------|
-| Language            | C                                                   |
-| Data Structures     | Stacks, Linked Lists, and a Sorting Algorithm       |
-| Input               | `.txt` file with maze layout (dimensions inferred)  |
-| Output (terminal)   | Step-by-step ASCII visualization + final total value|
-| Output (file)       | `.txt` file recording the final solution path       |
-
+| Requirement         | Detail                                                          |
+|---------------------|-----------------------------------------------------------------|
+| Language            | C                                                               |
+| Data Structures     | Stack, Sorted Linked List, Binary Min-Heap                      |
+| Input               | `.txt` file with maze layout (dimensions inferred at load time) |
+| Output (terminal)   | Step-by-step ASCII visualization + final total value            |
+| Output (file)       | `output/solution.txt` recording the final solution path         |
+| Optional GFX        | raylib window (`make WITH_GFX=1`)                               |
 
 ## Project Structure
 
@@ -54,18 +61,24 @@ This project implements the logic engine of an **archaeological exploration game
 │   ├── defs.h                      # Shared cell-type constants (CELL_WALL, CELL_PLAYER, …)
 │   ├── maze.h
 │   ├── backtrack.h
+│   ├── pathfind.h
 │   ├── renderer.h
+│   ├── renderer_gfx.h              # Graphical renderer interface (raylib)
+│   ├── heap.h
 │   ├── stack.h
 │   └── linked_list.h
 │
 ├── src/
-│   ├── main.c                      # Entry point — parses args, shows menu, runs solver
+│   ├── main.c                      # Entry point — 4-question menu, wires everything together
 │   ├── maze/
 │   │   └── maze.c                  # Maze loading, BFS reachability, treasure pre-assignment
 │   ├── engine/
-│   │   ├── backtrack.c             # DFS search — FIRST and BEST modes
-│   │   └── renderer.c              # ASCII rendering and solution file output
+│   │   ├── backtrack.c             # V1: DFS search — FIRST and BEST modes
+│   │   ├── pathfind.c              # V2: A* (FIRST) and Dijkstra (BEST)
+│   │   ├── renderer.c              # Terminal rendering and solution file output
+│   │   └── renderer_gfx.c          # Graphical renderer (raylib, compiled with WITH_GFX=1)
 │   └── structures/
+│       ├── heap.c                  # Binary min-heap priority queue (used by pathfind)
 │       ├── stack.c                 # Dynamic int stack — grows via realloc (tracks the current path)
 │       └── linked_list.c           # Sorted linked list (the backpack)
 │
@@ -87,8 +100,9 @@ This project implements the logic engine of an **archaeological exploration game
 │
 ├── docs/
 │   ├── architecture.md             # Module map, data ownership, runtime sequence diagrams
-│   ├── optimizations.md            # Reachability pre-computation and branch-and-bound analysis
+│   ├── optimizations.md            # Reachability pre-computation, branch-and-bound, A* heuristic
 │   ├── c-patterns.md               # Coding conventions used in this project
+│   ├── makefile.md                 # Build commands reference
 │   └── makefile-patterns.md        # Makefile structure and build patterns
 │
 ├── scripts/
@@ -100,7 +114,6 @@ This project implements the logic engine of an **archaeological exploration game
 │
 └── Makefile
 ```
-
 
 ## Input File Format
 
@@ -124,7 +137,7 @@ No header line is required. Dimensions are inferred at load time: `cols` = lengt
 
 ### Terminal
 At every step of the traversal, the program prints:
-- The current state of the maze (with the player's position marked).
+- The current state of the maze (with the player's position marked as `@`, trail as `.`).
 - The contents of the backpack (list of treasure values).
 
 At the end:
@@ -135,33 +148,102 @@ Backpack: [15, 40, 75, 100]
 ```
 
 ### Solution File (`output/solution.txt`)
-Records every cell visited on the **correct path** from `P` to `S`, in order.
-
+Records the final solution grid with the path marked as `.`, plus the backpack summary.
 
 ## Algorithm Design
 
-### Backtracking
+### V1 — Backtracking DFS
+
+#### BACKTRACK_FIRST — Iterative DFS
 1. Start at position `P`.
 2. Try moving in each direction (Up, Down, Left, Right).
-3. Mark visited cells to avoid loops.
-4. If a dead end is reached, **backtrack** using the stack.
-5. **First-path mode:** stop as soon as `S` is reached.  
-   **Best-path mode:** continue exploring all paths even after reaching `S`; keep the one with the highest total treasure value.
+3. Skip walls, visited cells, and non-reachable cells.
+4. If a dead end is reached, **backtrack** using the stack (pop = undo last step).
+5. Stops as soon as `S` is reached.
+
+#### BACKTRACK_BEST — Recursive DFS with Undo + Branch and Bound
+1. Explores **all** simple paths to `S`.
+2. On backtrack, undoes cell events: treasure pickup (`list_remove_value`) and trap loss (`list_insert` to restore).
+3. Prunes branches where `current_total + remaining_treasure <= best_total` — the upper bound can never beat what was already found.
+4. Returns the path with the highest total treasure value.
+
+### V2 — A\* and Dijkstra
+
+Both algorithms share the same binary min-heap priority queue and `parent[]` array for path reconstruction.
+
+#### PATHFIND_FIRST — A\*
+- Priority: `f(n) = g(n) + h(n)` where `g` = steps from start, `h` = Manhattan distance to exit.
+- Manhattan heuristic is admissible (never overestimates) — guarantees the shortest path.
+- Closed set prevents re-expanding settled cells.
+
+#### PATHFIND_BEST — Dijkstra
+- Priority: negative accumulated treasure value (negated to simulate max-heap in the min-heap).
+- Only treasure cells contribute positive weight; traps are neutral in the priority function.
+- Exact trap losses are applied in a final replay pass after the path is found.
 
 ### Backpack Sorting Strategy
 - Data structure: **sorted linked list** (ascending order by value).
-- On treasure pickup: insert in the correct position to maintain order.
-- On trap: remove the **head** of the list (lowest value).
-- This guarantees minimal loss when a trap is triggered.
+- On treasure pickup: `list_insert` walks to the correct position — O(n).
+- On trap: `list_remove_head` removes the cheapest item — O(1).
+- On best-path backtrack: `list_remove_value` undoes a specific pickup — O(n).
+
+## How to Build & Run
+
+### 1. Build
+
+```bash
+make             # standard terminal build
+make WITH_GFX=1  # optional: enable raylib graphical window
+                 # requires: sudo apt install libraylib-dev
+```
+
+### 2. Run
+
+```bash
+./maze mazes/maze_10x10.txt    # pass the maze file directly
+./maze                          # omit it to be prompted
+```
+
+### 3. Answer the 4-question menu
+
+```
+Algorithm:
+  1. Backtracking v1  (exhaustive DFS, branch-and-bound)
+  2. A* / Dijkstra v2 (A* for first path, Dijkstra for best path)
+
+Display:
+  1. Terminal (ASCII)
+  2. Graphical (raylib)      ← only shown when built with WITH_GFX=1
+
+Animation:
+  1. Interactive  (step-by-step, press Enter / SPACE)
+  2. Auto         (40 ms per step)
+  3. Silent       (result only)
+
+Path mode:
+  1. First path found
+  2. Best path  (maximum treasure)
+```
+
+### 4. Read the result
+
+The solution is printed to the terminal and written to `output/solution.txt`.
+
+### Other commands
+
+```bash
+make test         # Run all automated unit tests (41 tests)
+make test-visual  # Run visual test rendering
+make clean        # Remove build artifacts
+```
 
 ## Error Handling
 
-The program must handle the following cases gracefully:
-
 - Maze file not found → print error message and exit.
 - No valid path from `P` to `S` → inform the user that the maze has no solution.
-- Trap triggered with an empty backpack → skip item removal and display a warning.
+- Trap triggered with an empty backpack → skip item removal (no crash).
 - Maze file is empty or has no `P` / `S` cell → print error and exit.
+- `malloc`/`realloc` failure → print to `stderr` and exit.
 
 ## Grading Criteria
 
@@ -173,56 +255,3 @@ The program must handle the following cases gracefully:
 | Code quality (indentation, comments, modularity)   | ✓      |
 | Step-by-step ASCII visualization                   | ✓      |
 | Oral presentation & team knowledge demonstration   | ✓      |
-
-## How to Build & Run
-
-### 1. Build
-
-```bash
-make
-```
-
-Compiles all sources and produces the `./maze` executable.
-
-### 2. Run
-
-```bash
-./maze mazes/maze_10x10.txt    # pass the maze file directly
-./maze                          # omit it to be prompted
-```
-
-### 3. Choose an execution mode
-
-After the maze loads, an interactive menu is displayed:
-
-```
-Execution mode:
-  1. Interactive     —  First path
-  2. Interactive     —  Best path
-  3. Auto (display)  —  First path
-  4. Auto (display)  —  Best path
-  5. Auto (silent)   —  First path
-  6. Auto (silent)   —  Best path
-```
-
-| # | Display style | Path mode |
-|---|---|---|
-| 1 | Step-by-step (press Enter to advance) | First path found |
-| 2 | Step-by-step | Highest-value path |
-| 3 | Animated (40 ms/step) | First path found |
-| 4 | Animated | Highest-value path |
-| 5 | Silent (final result only) | First path found |
-| 6 | Silent | Highest-value path |
-
-### 4. Read the result
-
-The solution is printed to the terminal and written to `output/solution.txt`.
-
-### Other commands
-
-```bash
-make test         # Run all automated unit tests
-make test-visual  # Run visual test renderings
-make clean        # Remove build artifacts
-```
-

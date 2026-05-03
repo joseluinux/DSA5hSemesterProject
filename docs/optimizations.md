@@ -1,6 +1,6 @@
 # Search Optimizations
 
-Two complementary techniques reduce the search space of `BACKTRACK_BEST` without altering the core backtracking algorithm. Both run inside the existing DFS framework — no external solver or global restructuring required.
+Three complementary techniques reduce the search space and guide the algorithms toward good solutions efficiently. The first two apply to `BACKTRACK_BEST` (V1); the third applies to `pathfind` (V2). All share the same reachability pre-computation.
 
 See also: [`architecture.md`](architecture.md) for module relationships.
 
@@ -10,7 +10,9 @@ See also: [`architecture.md`](architecture.md) for module relationships.
 
 In a maze with dead-end corridors, the DFS will walk into a dead end, fail to find the exit, and backtrack — wasting time on every path that enters it. This happens even when the dead end has no treasure to justify the detour.
 
-A single BFS pass at load time identifies which cells can ever reach the exit. Any neighbor that fails this check is skipped unconditionally during DFS, before visiting it.
+A single BFS pass at load time identifies which cells can ever reach the exit. Any neighbor that fails this check is skipped unconditionally during DFS or graph expansion, before visiting it.
+
+This optimization is shared by **both** V1 (backtrack) and V2 (pathfind): `pathfind.c` applies the same `!reachable[next]` guard as `backtrack.c`.
 
 ### Algorithm
 
@@ -32,12 +34,12 @@ Column-wrap guard applies: LEFT from column 0 and RIGHT from the last column are
 
 ### Where it runs
 
-`maze_compute_reachability(Maze *m)` — called once at the end of `maze_load`. Result is stored in `m->reachable[]` (heap-allocated to `rows * cols` at load time). The BFS queue is also heap-allocated to `rows * cols` for the same reason.
+`maze_compute_reachability(Maze *m)` — called once at the end of `maze_load`. Result is stored in `m->reachable[]` (heap-allocated to `rows * cols` at load time). The BFS queue is also heap-allocated to `rows * cols`.
 
-During DFS, one extra guard is added to every direction loop:
+During DFS or heap expansion, one extra guard is added to every direction loop:
 
 ```c
-if (!maze->reachable[next]) continue;
+if (!(*maze).reachable[next]) continue;
 ```
 
 ### Complexity
@@ -45,7 +47,7 @@ if (!maze->reachable[next]) continue;
 | Phase | Cost |
 |---|---|
 | Pre-computation | O(V + E) — single BFS over the grid [1] |
-| Per DFS step | O(1) — array lookup |
+| Per search step | O(1) — array lookup |
 
 Where V = number of passable cells, E = edges between them (at most 4V for a grid).
 
@@ -57,28 +59,15 @@ flowchart TD
     BFS["BFS from exit\nexpand through non-wall cells"]
     MARK["reachable[pos] = 1\nfor each reached cell"]
     STORE["stored in Maze.reachable[]"]
-    DFS["During DFS:\nif !reachable[next] → skip"]
+    DFS["During V1 DFS:\nif !reachable[next] → skip"]
+    PF["During V2 expansion:\nif !reachable[next] → skip"]
 
     LOAD --> BFS --> MARK --> STORE
     STORE -.used by.-> DFS
+    STORE -.used by.-> PF
 ```
 
-```mermaid
-graph TD
-    subgraph "Maze example (5×5)"
-        E["S exit"]
-        A["· reachable"]
-        B["· reachable"]
-        C["# wall"]
-        D["dead end\n✗ not reachable"]
-    end
-
-    E -- "BFS expands" --> A
-    A -- "BFS expands" --> B
-    C -- "blocked" -.-> D
-```
-
-## 2. Branch and Bound
+## 2. Branch and Bound (V1 BACKTRACK_BEST only)
 
 ### Motivation
 
@@ -124,18 +113,6 @@ Because both values are passed by value into the recursive call, undoing them on
 
 The bound is never an underestimate: ignoring trap losses and assuming all remaining treasures are reachable and collectible can only overstate the true maximum. Therefore, pruning when `upper_bound <= best` never discards an actually-better solution [3][4].
 
-### Where it runs
-
-`explore()` in `src/engine/backtrack.c`. Initial values provided by `run_best`:
-
-```c
-int total_treasure = 0;
-for (int i = 0; i < maze->rows * maze->cols; i++)
-    total_treasure += maze->treasure_values[i];  /* sum of ALL treasures */
-
-explore(..., remaining_treasure = total_treasure, current_total = 0);
-```
-
 ### Diagram
 
 ```mermaid
@@ -159,9 +136,91 @@ flowchart TD
     LOOP --> APPLY --> UPDATE --> RECURSE --> UNDO --> LOOP
 ```
 
-## 3. Combined Effect
+## 3. A\* Manhattan Heuristic (V2 PATHFIND_FIRST only)
 
-The two techniques attack different parts of the search:
+### Motivation
+
+Dijkstra (uniform-cost search) expands nodes in order of `g(n)` — total cost from start. In a grid maze where every step costs 1, this is breadth-first search, which explores rings of equal distance around the start. A\* adds a heuristic `h(n)` that estimates the remaining distance to the goal, directing expansion toward the exit rather than uniformly in all directions.
+
+### The Manhattan Distance Heuristic
+
+For a flat 1D-indexed grid with `cols` columns:
+
+```c
+static int manhattan(int a, int b, int cols) {
+    int dr = a / cols - b / cols;   /* row difference */
+    int dc = a % cols - b % cols;   /* col difference */
+    if (dr < 0) dr = -dr;
+    if (dc < 0) dc = -dc;
+    return dr + dc;
+}
+```
+
+This counts the minimum steps needed ignoring walls — the "taxicab" distance.
+
+### Admissibility
+
+A heuristic is **admissible** if it never overestimates the true cost to the goal [4]. Manhattan distance is admissible on a 4-connected grid because:
+- Every step moves at most 1 unit in row or column.
+- Walls only increase the true path length; the heuristic ignores them.
+- Therefore `h(n) ≤ true_cost(n, goal)` always holds.
+
+An admissible heuristic guarantees that A\* finds an **optimal** (shortest) path [4].
+
+### Priority Function
+
+Each `HeapNode` stores:
+- `g` — steps from start
+- `priority = g + h` — used for heap ordering
+
+```c
+HeapNode nn = {
+    next,
+    new_g + manhattan(next, goal, cols),  /* priority = f */
+    new_g,                                /* g */
+    cur.pos                               /* parent */
+};
+heap_push(&h, nn);
+```
+
+### Lazy Deletion (Duplicate Handling)
+
+Rather than using a decrease-key operation (which would require a Fibonacci heap), duplicate entries for the same cell may exist in the heap. The closed set handles this:
+
+```c
+if (closed[cur.pos]) continue;   /* already settled — discard stale entry */
+closed[cur.pos] = 1;
+```
+
+This is correct because a cell is first popped at its optimal `f` value — any later pop for the same cell has equal or worse `f`.
+
+### Complexity
+
+| Phase | Cost |
+|---|---|
+| A\* (worst case) | O((V + E) log V) — each cell pushed at most once per relaxation |
+| Heuristic evaluation | O(1) — two arithmetic operations |
+
+In practice, the Manhattan heuristic dramatically reduces the number of cells expanded compared to uniform-cost search (Dijkstra with `h=0`), especially when the exit is far from the start.
+
+### Diagram
+
+```mermaid
+flowchart LR
+    START["Start (g=0)"] --> EXPAND["Expand: f = g + manhattan(pos, exit)"]
+    EXPAND --> HEAP["Heap always pops lowest f"]
+    HEAP --> GOAL{"pos == exit?"}
+    GOAL -->|No| RELAX["Relax neighbors\nif new_g < dist[next]"]
+    RELAX --> PUSH["Push with f = new_g + h(next)"]
+    PUSH --> HEAP
+    GOAL -->|Yes| DONE["Optimal shortest path found"]
+```
+
+## 4. Combined Effect
+
+### V1 — Reachability + Branch and Bound
+
+The two V1 techniques attack different parts of the search:
 
 | Technique | What it eliminates |
 |---|---|
@@ -182,83 +241,50 @@ flowchart LR
     BNB --> SOLUTION
 ```
 
-## 4. Performance Estimates
+### V2 — Reachability + A\* Heuristic
 
-> These are analytical estimates, not measured benchmarks. Actual times vary with maze topology (branch-point density, corridor length, treasure placement) and CPU.
+For V2, reachability prunes the graph before expansion; the Manhattan heuristic then guides which cells are expanded first.
 
-### Theoretical Search Space
+| Technique | Phase | Effect |
+|---|---|---|
+| Reachability | Load time, O(V+E) | Removes dead ends before any search begins |
+| Manhattan heuristic | Per expansion, O(1) | Biases heap toward cells closer to exit |
+| Closed set | Per expansion, O(1) | Prevents re-expanding settled cells |
 
-For a maze with N passable cells, the number of simple paths explored by an unoptimized DFS is bounded by the number of **self-avoiding walks** on a 2D square lattice: approximately μ^N where μ ≈ 2.638 (the connective constant for the square lattice [5]). In practice, walls and the maze structure reduce this significantly — the real bound is closer to 3^B where B is the number of **branch points** (cells with 3 or more open neighbors), since each branch point is where the DFS forks [3].
+## 5. Performance Estimates
 
-Each maze's characteristics (the solver now supports any size; the bundled named mazes are kept as convenient benchmarks):
+> These are analytical estimates, not measured benchmarks. Actual times vary with maze topology and CPU.
 
-| Maze | Grid | Total cells | Walls | Passable (N) | Treasures | Traps |
+| Maze | Grid | Passable (N) | V1 FIRST | V1 BEST (est.) | V2 A\* | V2 Dijkstra |
 |---|---|---|---|---|---|---|
-| `maze_10x10.txt` | 10×10 | 100 | 58 | 42 | 1 | 1 |
-| `maze_20x15.txt` | 20×15 | 300 | 144 | 156 | 2 | 2 |
-| `maze_30x10.txt` | 30×10 | 300 | 162 | 138 | 2 | 2 |
-| `maze_40x40.txt` | 40×40 | 1600 | 684 | 916 | 5 | 4 |
+| `maze_10x10.txt` | 10×10 | 42 | < 1 ms | < 1 ms | < 1 ms | < 1 ms |
+| `maze_20x15.txt` | 20×15 | 156 | < 1 ms | < 100 ms | < 1 ms | < 1 ms |
+| `maze_30x10.txt` | 30×10 | 138 | < 1 ms | < 50 ms | < 1 ms | < 1 ms |
+| `maze_40x40.txt` | 40×40 | 916 | < 1 ms | minutes–hours | < 1 ms | < 1 ms |
+| 1001×1001 | 1001×1001 | ~500 K | < 1 s (first) | not feasible | < 5 s | < 5 s |
 
-Wall density (walls / total cells): 58%, 48%, 54%, 43% respectively. Higher wall density → fewer branch points → smaller search space.
-
-> **Note on size limits:** there are no fixed grid size limits. Arrays are heap-allocated to exactly `rows × cols` at load time. The stress-test script (`scripts/stress_test.py`) validates first-path mode on corridors up to 10 000 columns/rows and procedurally generated mazes up to 1001×1001 (≈1 M cells).
-
-### Estimated Search Space and Time
-
-Assumptions:
-- **Branch points** estimated as ~5–10% of passable cells for a structured maze (corridors with junctions)
-- **DFS throughput** in `DISPLAY_NONE` mode: ~5×10⁶ node visits/second on a modern CPU (each visit: array lookups, validity check, stack push/pop)
-- **B&B pruning factor**: estimated 70–90% reduction on treasure-sparse mazes (few treasures → `remaining_treasure` drops to 0 quickly after the first solution is found, making the bound very tight)
-- **Reachability pruning factor**: estimated 15–30% reduction in effective N (eliminates dead-end subtrees before they are entered)
-
-| Maze | Est. branch points (B) | Unoptimized paths (~3^B) | Unoptimized time | With reachability | With reachability + B&B |
-|---|---|---|---|---|---|
-| `maze_10x10.txt` | ~4 | ~81 | < 1 ms | < 1 ms | < 1 ms |
-| `maze_20x15.txt` | ~15 | ~14 million | ~3 s | ~2 s | < 100 ms |
-| `maze_30x10.txt` | ~13 | ~1.6 million | < 1 s | < 500 ms | < 50 ms |
-| `maze_40x40.txt` | ~90 | ~10^43 | **not feasible** | **not feasible** | **minutes–hours** |
-
-> The 40×40 estimate illustrates the hard case for BEST mode. 916 passable cells with ~43% open space yields many branch points; `remaining_treasure` stays high until most treasures are found; the B&B bound is loose throughout. Best-path on `maze_40x40.txt` is expected to be the longest-running bundled case by far.
->
-> For FIRST mode, the solver completes in well under a second on all bundled mazes and on procedurally generated mazes up to 1001×1001 (verified by `scripts/stress_test.py`). BEST mode complexity is governed by the number of branch points, not the grid size — a large open maze is slower than a large corridor maze regardless of dimensions.
-
-### How Each Optimization Helps
-
-```mermaid
-xychart-beta
-    title "Estimated search space reduction (log scale, maze_20x15)"
-    x-axis ["No opt", "Reachability only", "B&B only", "Combined"]
-    y-axis "Relative node visits (log₁₀)" 0 --> 8
-    bar [7.1, 6.6, 4.5, 3.0]
-```
-
-| Optimization | Mechanism | Best case | Worst case |
-|---|---|---|---|
-| Reachability pruning | Cuts non-reachable subtrees at entry | Dead-end-heavy maze | Fully connected maze (no dead ends) |
-| Branch and bound | Cuts subtrees whose upper bound ≤ best | Treasures found early, few in total | Many treasures spread evenly across all paths |
-| Combined | Smaller graph + value-based pruning | Both above simultaneously | Open maze, many evenly distributed treasures |
+> V2 solves any maze in O((V+E) log V) regardless of size. V1 BEST complexity is governed by branch-point count, not grid dimensions. The stress-test script verifies first-path mode on corridors up to 10 000 columns/rows and generated mazes up to 1001×1001.
 
 ### Complexity Summary
 
 | Phase | Cost |
 |---|---|
-| `maze_compute_reachability` | O(V + E) once at load — negligible |
-| `maze_assign_treasures` | O(V) once at load — negligible |
-| DFS without optimization | O(μ^N) ≈ O(2.638^N) |
-| DFS with reachability only | O(μ^N') where N' = reachable cells < N |
-| DFS with B&B only | O(μ^N × (1 − pruning_factor)) |
-| DFS with both | O(μ^N' × (1 − pruning_factor)) |
-
-The pre-computation cost is always O(V) or O(V+E) — one-time, fast, and independent of the search. The runtime savings compound: a 20% reduction in N from reachability plus a 80% B&B pruning factor does not give 100% reduction — it gives (0.8) × (μ^(0.8N)) vs μ^N, which is still a dramatic improvement for large N.
+| `maze_compute_reachability` | O(V + E) once at load |
+| `maze_assign_treasures` | O(V) once at load |
+| V1 DFS without optimization | O(μ^N) ≈ O(2.638^N) |
+| V1 DFS with reachability only | O(μ^N') where N' < N |
+| V1 DFS with reachability + B&B | O(μ^N' × (1 − pruning_factor)) |
+| V2 A\* | O((V + E) log V) |
+| V2 Dijkstra | O((V + E) log V) |
 
 ## References
 
 [1] Cormen, T.H., Leiserson, C.E., Rivest, R.L., Stein, C. (2009). *Introduction to Algorithms*, 3rd ed. MIT Press. Ch. 22 — Breadth-First Search, pp. 594–602.
 
-[2] Land, A.H., Doig, A.G. (1960). "An Automatic Method of Solving Discrete Programming Problems." *Econometrica*, 28(3), 497–520. — Original formulation of branch-and-bound.
+[2] Land, A.H., Doig, A.G. (1960). "An Automatic Method of Solving Discrete Programming Problems." *Econometrica*, 28(3), 497–520.
 
-[3] Lawler, E.L., Wood, D.E. (1966). "Branch-and-Bound Methods: A Survey." *Operations Research*, 14(4), 699–719. — Survey of B&B strategies, upper bound construction, and pruning correctness.
+[3] Lawler, E.L., Wood, D.E. (1966). "Branch-and-Bound Methods: A Survey." *Operations Research*, 14(4), 699–719.
 
 [4] Russell, S., Norvig, P. (2020). *Artificial Intelligence: A Modern Approach*, 4th ed. Pearson. Ch. 3 — Admissible heuristics and optimistic bounds in tree search, pp. 93–99.
 
-[5] Duminil-Copin, H., Smirnov, S. (2012). "The connective constant of the honeycomb lattice equals √(2+√2)." *Annals of Mathematics*, 175(3), 1653–1665. — Proves the connective constant μ ≈ 2.638 for self-avoiding walks on the 2D square lattice, establishing the base of the exponential growth rate for simple paths in grid graphs.
+[5] Duminil-Copin, H., Smirnov, S. (2012). "The connective constant of the honeycomb lattice equals √(2+√2)." *Annals of Mathematics*, 175(3), 1653–1665.
