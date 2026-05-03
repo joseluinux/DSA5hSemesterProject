@@ -13,15 +13,9 @@
 #include <linked_list.h>
 
 typedef enum {
-    BACKTRACK_FIRST = 0, /**< Stop at the first path that reaches the exit. */
-    BACKTRACK_BEST /**< Explore all paths; keep the highest-value haul. */
+    BACKTRACK_FIRST = 0,
+    BACKTRACK_BEST
 } BacktrackMode;
-
-typedef enum {
-    DISPLAY_AUTO = 0, /**< Animated, 40 ms per step. */
-    DISPLAY_INTERACTIVE, /**< Step-by-step; waits for Enter and prints events. */
-    DISPLAY_NONE /**< No rendering; final result only. */
-} DisplayMode;
 
 /**
  * @brief Run the maze solver from the player's starting position.

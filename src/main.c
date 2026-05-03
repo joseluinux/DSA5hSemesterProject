@@ -5,25 +5,18 @@
 
 #include <maze.h>
 #include <backtrack.h>
+#include <pathfind.h>
 #include <linked_list.h>
+#include <renderer.h>
+#ifdef WITH_GFX
+#include <renderer_gfx.h>
+#endif
 
-/**
- * @brief Discard stdin through the next newline, including the newline itself.
- *
- * Required after scanf: scanf leaves the trailing '\n' in the buffer, which
- * interactive mode's wait_enter() would consume immediately without pausing.
- */
 static void flush_stdin(void) {
     int c;
     while ((c = getchar()) != '\n' && c != EOF);
 }
 
-/**
- * @brief Prompt for a maze file path and read it into @p buf.
- * @param buf      Output buffer for the path.
- * @param bufsize  Size of @p buf in bytes.
- * @return         1 if a non-empty path was read, 0 otherwise.
- */
 static int read_filepath(char *buf, int bufsize) {
     printf("Maze file path: ");
     fflush(stdout);
@@ -32,30 +25,23 @@ static int read_filepath(char *buf, int bufsize) {
     return buf[0] != '\0';
 }
 
-/** @brief Print the execution-mode menu to stdout. */
-static void print_menu(void) {
-    printf("\nExecution mode:\n");
-    printf("  1. Interactive     —  First path\n");
-    printf("  2. Interactive     —  Best path\n");
-    printf("  3. Auto (display)  —  First path\n");
-    printf("  4. Auto (display)  —  Best path\n");
-    printf("  5. Auto (silent)   —  First path\n");
-    printf("  6. Auto (silent)   —  Best path\n\n");
-    printf("Select [1-6]: ");
+static int ask(const char *prompt, int lo, int hi) {
+    int v = 0;
+    printf("%s [%d-%d]: ", prompt, lo, hi);
     fflush(stdout);
+    if (scanf("%d", &v) != 1 || v < lo || v > hi) {
+        fprintf(stderr, "Invalid choice.\n");
+        exit(1);
+    }
+    flush_stdin();
+    return v;
 }
 
-/**
- * @brief Entry point: parse arguments, show the menu, and run the solver.
- * @return 0 on success, 1 on any error.
- */
 int main(int argc, char *argv[]) {
     printf("=== MAZE SOLVER ===\n\n");
 
     char filepath[256];
-
     if (argc >= 2) {
-        /* strncpy does not guarantee null termination when src length >= bufsize. */
         strncpy(filepath, argv[1], sizeof(filepath) - 1);
         filepath[sizeof(filepath) - 1] = '\0';
     } else {
@@ -65,51 +51,85 @@ int main(int argc, char *argv[]) {
         }
     }
 
-    print_menu();
+    /*
+    Menu
+    */
+    printf("Algorithm:\n");
+    printf("  1. Backtracking v1  (exhaustive DFS, branch-and-bound)\n");
+    printf("  2. A* / Dijkstra v2 (A* for first path, Dijkstra for best path)\n");
+    int algo = ask("Choice", 1, 2);
 
-    int choice = 0;
-    if (scanf("%d", &choice) != 1 || choice < 1 || choice > 6) {
-        fprintf(stderr, "Invalid choice.\n");
-        return 1;
+    printf("\nDisplay:\n");
+    printf("  1. Terminal (ASCII)\n");
+#ifdef WITH_GFX
+    printf("  2. Graphical (raylib)\n");
+    int display_type = ask("Choice", 1, 2);
+#else
+    int display_type = 1; /* graphical unavailable without WITH_GFX */
+#endif
+
+    printf("\nAnimation:\n");
+    printf("  1. Interactive  (step-by-step, press Enter / SPACE)\n");
+    printf("  2. Auto         (40 ms per step)\n");
+    printf("  3. Silent       (result only)\n");
+    int anim = ask("Choice", 1, 3);
+
+    printf("\nPath mode:\n");
+    printf("  1. First path found\n");
+    printf("  2. Best path  (maximum treasure)\n");
+    int path_mode = ask("Choice", 1, 2);
+
+    DisplayMode display;
+    switch (anim) {
+        case 1: display = DISPLAY_INTERACTIVE; break;
+        case 2: display = DISPLAY_AUTO;        break;
+        default: display = DISPLAY_NONE;       break;
     }
-    flush_stdin(); /* clear '\n' before interactive mode starts reading chars */
 
-    BacktrackMode mode;
-    DisplayMode   display;
-
-    switch (choice) {
-        case 1: mode = BACKTRACK_FIRST; display = DISPLAY_INTERACTIVE; break;
-        case 2: mode = BACKTRACK_BEST;  display = DISPLAY_INTERACTIVE; break;
-        case 3: mode = BACKTRACK_FIRST; display = DISPLAY_AUTO;        break;
-        case 4: mode = BACKTRACK_BEST;  display = DISPLAY_AUTO;        break;
-        case 5: mode = BACKTRACK_FIRST; display = DISPLAY_NONE;        break;
-        case 6: mode = BACKTRACK_BEST;  display = DISPLAY_NONE;        break;
-        default: return 1;
-    }
-
-    /* srand must be called before maze_load: maze_assign_treasures (called
-     * inside maze_load) uses rand() to set treasure values at load time. */
+    /* srand before maze_load: maze_assign_treasures uses rand() at load time. */
     srand((unsigned int)time(NULL));
 
     Maze *m = maze_load(filepath);
     if (!m) return 1;
 
-    const char *mode_str    = (mode    == BACKTRACK_BEST)     ? "Best path"      : "First path";
-    const char *display_str = (display == DISPLAY_AUTO)       ? "Auto (display)" :
-                              (display == DISPLAY_INTERACTIVE) ? "Interactive"    : "Auto (silent)";
+    const char *algo_str = (algo == 2) ? "A*/Dijkstra v2" : "Backtracking v1";
+    const char *disp_str = (display == DISPLAY_INTERACTIVE) ? "Interactive"
+                         : (display == DISPLAY_AUTO)        ? "Auto (40 ms)"
+                                                            : "Silent";
+    const char *gfx_str  = (display_type == 2) ? "Graphical" : "Terminal";
+    const char *mode_str = (path_mode == 2)    ? "Best path" : "First path";
 
-    printf("\nMode    : %s\n", mode_str);
-    printf("Display : %s\n", display_str);
-    printf("Maze    : %s  (%d x %d)\n\n", filepath, m->cols, m->rows);
+    printf("\nAlgorithm : %s\n", algo_str);
+    printf("Display   : %s / %s\n", gfx_str, disp_str);
+    printf("Path mode : %s\n", mode_str);
+    printf("Maze      : %s  (%d x %d)\n\n", filepath, m->cols, m->rows);
+
+    if (display_type == 2) {
+#ifdef WITH_GFX
+        renderer_set_mode(1);
+        renderer_gfx_init(m);
+#else
+        fprintf(stderr, "Graphical mode not available (rebuild with WITH_GFX=1).\n");
+        maze_free(m);
+        return 1;
+#endif
+    }
 
     LinkedList backpack;
     list_init(&backpack);
 
-    int found = backtrack_run(m, &backpack, mode, display);
+    int found;
+    if (algo == 2) {
+        PathfindMode pf = (path_mode == 2) ? PATHFIND_BEST : PATHFIND_FIRST;
+        found = pathfind_run(m, &backpack, pf, display);
+    } else {
+        BacktrackMode bt = (path_mode == 2) ? BACKTRACK_BEST : BACKTRACK_FIRST;
+        found = backtrack_run(m, &backpack, bt, display);
+    }
 
     if (found) {
         int total = 0;
-        for (Node *n = backpack.head; n; n = n->next) total += n->value;
+        for (Node *n = backpack.head; n; n = (*n).next) total += (*n).value;
 
         printf("\n=== EXIT REACHED ===\n");
         printf("Total treasure value: %d coins\n", total);

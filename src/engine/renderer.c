@@ -5,21 +5,55 @@
 #include <sys/stat.h>
 #include <renderer.h>
 #include <defs.h>
+#ifdef WITH_GFX
+#include <renderer_gfx.h>
+#endif
 
-static unsigned int step_delay_us = 40000; /* 40 ms default; 0 disables sleep */
+static unsigned int step_delay_us  = 40000; /* 40 ms default; 0 disables sleep */
+static int          graphical_mode = 0;
 
-/** @brief Set the per-step sleep duration; 0 disables sleeping. */
+void renderer_set_mode(int graphical) {
+    graphical_mode = graphical;
+}
+
 void renderer_set_delay(unsigned int delay_us) {
     step_delay_us = delay_us;
+}
+
+void renderer_wait_interactive(void) {
+#ifdef WITH_GFX
+    if (graphical_mode) {
+        renderer_gfx_wait_interactive();
+        return;
+    }
+#endif
+    printf("  [Press Enter to continue]");
+    fflush(stdout);
+    int c;
+    while ((c = getchar()) != '\n' && c != EOF);
 }
 
 /* Reused across frames; grown when the maze gets larger, never shrunk. */
 static char *on_path_buf = NULL;
 static int   on_path_cap = 0;
 
-/** @brief Redraw the maze in-place using ANSI escape sequences; see renderer.h. */
 void renderer_draw(const Maze *m, int current_pos,
                    const LinkedList *backpack, const Stack *path) {
+#ifdef WITH_GFX
+    if (graphical_mode) {
+        if (renderer_gfx_should_close()) {
+            /* User closed the window mid-search: shut it down immediately
+             * and fall back to silent terminal mode for the rest of the run. */
+            renderer_gfx_force_close();
+            graphical_mode = 0;
+            return;
+        }
+        renderer_gfx_draw(m, current_pos, backpack, path);
+        if (step_delay_us > 0)
+            renderer_gfx_wait_auto(step_delay_us / 1000000.0);
+        return;
+    }
+#endif
     int n = (*m).rows * (*m).cols;
 
     /* Grow the lookup buffer only when the maze is larger than any seen before.
@@ -148,4 +182,15 @@ void renderer_write_solution(const Stack *path, const Maze *m, const LinkedList 
 
     fclose(f);
     printf("Solution written to output/solution.txt\n");
+}
+
+void renderer_finalize(const Stack *path, const Maze *m, const LinkedList *backpack) {
+    renderer_print_solution(path, m);
+    renderer_write_solution(path, m, backpack);
+#ifdef WITH_GFX
+    if (graphical_mode) {
+        renderer_gfx_draw(m, (*m).exit_pos, backpack, path);
+        renderer_gfx_show_and_close();
+    }
+#endif
 }

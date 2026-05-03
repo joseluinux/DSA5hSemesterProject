@@ -76,13 +76,6 @@ static int is_wrap(int current, int d, int cols) {
     return 0;
 }
 
-/** @brief Block until the user presses Enter. */
-static void wait_enter(void) {
-    printf("  [Press Enter to continue]");
-    fflush(stdout);
-    int c;
-    while ((c = getchar()) != '\n' && c != EOF);
-}
 
 /**
  * @brief Format a human-readable step description into @p buf.
@@ -155,14 +148,13 @@ static int run_first(Maze *maze, LinkedList *backpack, Stack *path, DisplayMode 
         }
 
         if (maze_cell(maze, current) == CELL_EXIT) {
-            if (display == DISPLAY_INTERACTIVE) wait_enter();
-            renderer_print_solution(path, maze);
-            renderer_write_solution(path, maze, backpack);
+            if (display == DISPLAY_INTERACTIVE) renderer_wait_interactive();
+            renderer_finalize(path, maze, backpack);
             result = 1;
             break;
         }
 
-        if (display == DISPLAY_INTERACTIVE) wait_enter();
+        if (display == DISPLAY_INTERACTIVE) renderer_wait_interactive();
 
         int found = 0;
         for (int d = 0; d < 4; d++) {
@@ -246,7 +238,7 @@ static void explore(Maze *maze, Stack *path, LinkedList *backpack,
 
     if (display == DISPLAY_INTERACTIVE) {
         printf("  %s\n", arrived_msg);
-        wait_enter();
+        renderer_wait_interactive();
     }
 
     if (maze_cell(maze, current) == CELL_EXIT) {
@@ -387,14 +379,13 @@ static int run_best(Maze *maze, LinkedList *backpack, Stack *path, DisplayMode d
         list_insert(backpack, best.backpack_values[i]);
     free(best.backpack_values);
 
-    renderer_print_solution(path, maze);
-    renderer_write_solution(path, maze, backpack);
+    renderer_finalize(path, maze, backpack);
     return 1;
 }
 
 /** @brief Run the maze solver; see backtrack.h for the full contract. */
 int backtrack_run(Maze *maze, LinkedList *backpack, BacktrackMode mode, DisplayMode display) {
-    /* Interactive mode drives its own pacing via wait_enter(); the renderer
+    /* Interactive mode drives its own pacing via renderer_wait_interactive(); the renderer
      * delay would add unwanted latency on top of the user's keystrokes. */
     if (display == DISPLAY_INTERACTIVE)
         renderer_set_delay(0);
