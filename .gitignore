@@ -13,3 +13,9 @@ output/solution.txt
 
 # MCP files
 CLAUDE.md
+
+# Presentation (Slidev)
+presentation/node_modules/
+presentation/.slidev/
+presentation/dist/
+presentation/.netlify/
